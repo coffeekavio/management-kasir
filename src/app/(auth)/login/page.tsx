@@ -132,12 +132,6 @@ export default function LoginPage() {
         <p className="text-center text-blue-100 text-sm mt-8">
           © 2026 Manager Kasir. Semua hak dilindungi.
         </p>
-        <p className='text-center text-blue-100 text-sm mt-8'>
-          Info Login <br />
-          Username : admin@gmail.com <br />
-          Password : admin123 <br />
-          Untuk sistem sudah terintegrasi API Database menggunakan fast api dan supabase
-        </p>
       </div>
     </div>
   );
