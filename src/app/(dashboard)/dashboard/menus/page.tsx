@@ -2,38 +2,10 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { Plus, Edit2, Trash2, Search, X, Save, Coffee, Layers, Eye, EyeOff, CheckSquare, Square, Trash } from 'lucide-react';
+import Link from 'next/link';
 import { formatCurrency } from '@/lib/utils';
-import { api } from '@/services/api';
+import { menuService, type Category, type Ingredient, type RecipeItemInput, type Menu } from '@/services/menuService';
 import { useAuthStore } from '@/lib/store';
-
-// Interface Lokal untuk Manajemen Menu & Resep
-interface Category {
-  id: string;
-  name: string;
-}
-
-interface RecipeItemInput {
-  ingredientId: string;
-  quantity: number;
-}
-
-interface Menu {
-  id: string;
-  name: string;
-  description: string;
-  price: number;
-  categoryId: string;
-  isAvailable: boolean;
-  trackStock: boolean;
-  recipe?: RecipeItemInput[];
-}
-
-interface Ingredient {
-  id: string;
-  name: string;
-  unit: string;
-  cost?: number; // HPP per unit dari supplier/pembelian
-}
 
 export default function MenusPage() {
   const [menus, setMenus] = useState<Menu[]>([]);
@@ -48,13 +20,9 @@ export default function MenusPage() {
 
   // Modals Toggles
   const [isMenuModalOpen, setIsMenuModalOpen] = useState(false);
-  const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
   
   // State Edit
   const [editingMenu, setEditingMenu] = useState<Menu | null>(null);
-
-  // Form State Kategori
-  const [categoryName, setCategoryName] = useState('');
 
   // Form State Menu
   const [menuForm, setMenuForm] = useState({
@@ -87,7 +55,7 @@ export default function MenusPage() {
     return { profit, percentage };
   };
 
-  // Mengambil seluruh data awal (Menu, Kategori, Bahan Baku) dari FastAPI
+  // Mengambil seluruh data awal (Menu, Kategori, Bahan Baku)
   const fetchData = useCallback(async () => {
     try {
       if (!activeCafeId) {
@@ -95,49 +63,16 @@ export default function MenusPage() {
       }
 
       // 1. Fetch Kategori
-      const catRes = await api.get<{ data: Category[] } | Category[]>(`/api/kategori/?cafe_id=${activeCafeId}`);
-      const categoriesData = Array.isArray(catRes.data) ? catRes.data : catRes.data.data || [];
+      const categoriesData = await menuService.getCategories(activeCafeId);
       setCategories(categoriesData);
 
       // 2. Fetch Master Bahan Baku
-      const ingRes = await api.get<{ data: Ingredient[] }>(`/api/ingredients/?cafe_id=${activeCafeId}`);
-      setIngredients(ingRes.data.data || []);
+      const ingredientsData = await menuService.getIngredients(activeCafeId);
+      setIngredients(ingredientsData);
 
       // 3. Fetch Menu beserta array resepnya
-      interface RecipeIngredient {
-        ingredient_id?: string;
-        ingredientId?: string;
-        quantity?: number;
-      }
-      interface MenuResponse {
-        id: string;
-        name: string;
-        description?: string;
-        price?: number;
-        category_id?: string;
-        categoryId?: string;
-        is_available?: boolean;
-        track_stock?: boolean;
-        recipe_ingredients?: RecipeIngredient[];
-      }
-      const menuRes = await api.get<{ data: MenuResponse[] }>(`/api/menus/?cafe_id=${activeCafeId}`);
-      const mappedMenus = (menuRes.data.data || []).map((m: MenuResponse) => ({
-        id: m.id,
-        name: m.name,
-        description: m.description || '',
-        price: m.price || 0,
-        categoryId: m.category_id || m.categoryId || '',
-        isAvailable: m.is_available !== false,
-        trackStock: m.track_stock === true,
-        // Map data resep dari relasi
-        recipe: m.recipe_ingredients 
-          ? m.recipe_ingredients.map((r: RecipeIngredient) => ({
-              ingredientId: r?.ingredient_id || r?.ingredientId || '',
-              quantity: r?.quantity || 0
-            }))
-          : []
-      }));
-      setMenus(mappedMenus);
+      const menusData = await menuService.getMenus(activeCafeId);
+      setMenus(menusData);
     } catch (error: unknown) {
       console.error('Gagal mengambil data master menu:', error);
     }
@@ -148,30 +83,6 @@ export default function MenusPage() {
       fetchData();
     }
   }, [activeCafeId, fetchData]);
-
-  // Handler Tambah Kategori Baru
-  const handleSaveCategory = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!categoryName.trim()) return;
-
-    try {
-      if (!activeCafeId) {
-        alert('Error: Silakan pilih cafe terlebih dahulu');
-        return;
-      }
-
-      await api.post('/api/kategori/', {
-        cafe_id: activeCafeId,
-        name: categoryName
-      });
-      setIsCategoryModalOpen(false);
-      setCategoryName('');
-      fetchData(); // Refresh list
-    } catch (err: unknown) {
-      console.error('Gagal menyimpan kategori:', err);
-      alert('Gagal menyimpan kategori');
-    }
-  };
 
   // Membuka Modal Pembuatan Menu Baru
   const handleOpenAddMenu = () => {
@@ -247,7 +158,7 @@ export default function MenusPage() {
         return;
       }
 
-      // Mempersiapkan payload data sesuai skema CreateMenuRequest di FastAPI
+      // Mempersiapkan payload data
       const payload = {
         cafe_id: activeCafeId,
         category_id: menuForm.categoryId,
@@ -266,19 +177,13 @@ export default function MenusPage() {
       };
 
       if (editingMenu) {
-        // EDIT MENU - Kirim PUT request ke FastAPI
-        const response = await api.put(`/api/menus/${editingMenu.id}`, payload);
-        
-        if (response.data.status === 'success' || response.status === 200) {
-          alert(`Menu "${menuForm.name}" berhasil diperbarui!`);
-        }
+        // EDIT MENU
+        await menuService.updateMenu(editingMenu.id, payload);
+        alert(`Menu "${menuForm.name}" berhasil diperbarui!`);
       } else {
         // TAMBAH MENU BARU
-        const response = await api.post('/api/menus/', payload);
-        
-        if (response.data.status === 'success' || response.status === 201) {
-          alert(`Menu "${menuForm.name}" berhasil ditambahkan ke kasir!`);
-        }
+        await menuService.createMenu(payload);
+        alert(`Menu "${menuForm.name}" berhasil ditambahkan ke kasir!`);
       }
 
       // Tutup modal dan refresh data dari database
@@ -296,7 +201,7 @@ export default function MenusPage() {
   const handleDeleteMenu = async (id: string) => {
     if (confirm('Apakah Anda yakin ingin menghapus produk jualan ini?')) {
       try {
-        await api.delete(`/api/menus/${id}`);
+        await menuService.deleteMenu(id);
         setMenus(menus.filter((m) => m.id !== id));
       } catch (err: unknown) {
         console.error('Gagal menghapus menu:', err);
@@ -321,13 +226,12 @@ export default function MenusPage() {
           <p className="text-gray-600 mt-1">Kelola varian menu jualan kasir beserta manajemen komposisi resep</p>
         </div>
         <div className="flex gap-2">
-          <button
-            onClick={() => setIsCategoryModalOpen(true)}
+          <Link href="/dashboard/categories"
             className="flex items-center gap-2 border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 font-semibold px-4 py-2 rounded-lg transition-colors text-sm"
           >
             <Layers size={18} />
-            Tambah Kategori
-          </button>
+            Manajemen Kategori
+          </Link>
           <button
             onClick={handleOpenAddMenu}
             className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4 py-2 rounded-lg transition-colors text-sm"
@@ -446,48 +350,7 @@ export default function MenusPage() {
       </div>
 
       {/* ======================================================== */}
-      {/* 1. MODAL TAMBAH KATEGORI                                 */}
-      {/* ======================================================== */}
-      {isCategoryModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-sm overflow-hidden border border-gray-100">
-            <div className="bg-gradient-to-r from-gray-700 to-gray-800 text-white px-5 py-3.5 flex items-center justify-between">
-              <h3 className="font-bold text-sm">Buat Kategori Baru</h3>
-              <button onClick={() => setIsCategoryModalOpen(false)} className="text-white/80 hover:text-white">
-                <X size={18} />
-              </button>
-            </div>
-            <form onSubmit={handleSaveCategory} className="p-5 space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1">Nama Kelompok Kategori</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Contoh: Mocktail, Dessert, Side Dish"
-                  value={categoryName}
-                  onChange={(e) => setCategoryName(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg outline-none text-sm text-gray-700"
-                />
-              </div>
-              <div className="flex justify-end gap-2 pt-2 border-t border-gray-50">
-                <button
-                  type="button"
-                  onClick={() => setIsCategoryModalOpen(false)}
-                  className="px-3 py-1.5 border border-gray-300 rounded-lg text-xs text-gray-600"
-                >
-                  Batal
-                </button>
-                <button type="submit" className="bg-blue-600 text-white px-4 py-1.5 rounded-lg text-xs font-semibold">
-                  Simpan Kategori
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* ======================================================== */}
-      {/* 2. MODAL TAMBAH & EDIT MENU JUALAN + RACIK RESEP (BOM)  */}
+      {/* MODAL TAMBAH & EDIT MENU JUALAN + RACIK RESEP (BOM)  */}
       {/* ======================================================== */}
       {isMenuModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">

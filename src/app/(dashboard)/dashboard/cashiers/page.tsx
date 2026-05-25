@@ -3,20 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuthStore } from '@/lib/store';
 import { Eye, EyeOff, Plus, Shield, ClipboardCheck, User, X, Edit2, Trash2 } from 'lucide-react';
-
-interface Cashier {
-  id: string;
-  name: string;
-  email: string;
-  role: 'kasir' | 'supervisor' | 'manager';
-  username: string;
-}
-
-interface ApiResponse<T> {
-  status: 'success' | 'error';
-  data: T;
-  detail?: string;
-}
+import { cashierService, type Cashier } from '@/services/cashierService';
 
 export default function CashiersPage() {
   const [showPassword, setShowPassword] = useState(false);
@@ -51,25 +38,13 @@ export default function CashiersPage() {
     if (!activeCafeId) return; // Pastikan activeCafeId tersedia
     setPageLoading(true); // Reset loading saat cafe berubah
     try {
-      const response = await fetch(`https://fastapi-kasir.vercel.app/api/users?cafe_id=${activeCafeId}`);
-      const result: ApiResponse<{ id: string; full_name: string; email: string | null; role: string; username: string }[]> = await response.json();
-      if (response.ok && result.status === 'success') {
-        const mappedData: Cashier[] = result.data.map((emp) => ({
-          id: emp.id,
-          name: emp.full_name,
-          email: emp.email || `${emp.username}@kasir.com`,
-          role: emp.role as 'kasir' | 'supervisor' | 'manager',
-          username: emp.username
-        }));
-        setCashiers(mappedData);
-        setPageError(''); // Clear error jika berhasil
-      } else {
-        setPageError('Gagal memuat data karyawan');
-        setCashiers([]);
-      }
+      const data = await cashierService.getEmployeesByCafe(activeCafeId);
+      setCashiers(data);
+      setPageError(''); // Clear error jika berhasil
     } catch (err) {
-      console.error('Gagal mengambil data dari server:', err);
-      setPageError('Terjadi kesalahan saat memuat data karyawan');
+      const error = err as Error;
+      console.error('Gagal mengambil data dari server:', error);
+      setPageError(error.message || 'Terjadi kesalahan saat memuat data karyawan');
       setCashiers([]);
     } finally {
       setPageLoading(false);
@@ -114,62 +89,44 @@ export default function CashiersPage() {
 
     try {
       if (isEditMode && editingId) {
-        // Logika UPDATE/EDIT data ke FastAPI
-        const response = await fetch(`https://fastapi-kasir.vercel.app/api/users/${editingId}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            email,
-            username,
-            full_name: fullName,
-            role,
-            ...(password ? { password } : {}) // Hanya kirim password jika diisi
-          }),
+        // Logika UPDATE/EDIT data
+        await cashierService.updateEmployee(editingId, {
+          email,
+          username,
+          full_name: fullName,
+          role,
+          ...(password ? { password } : {}) // Hanya kirim password jika diisi
         });
 
-        const data: ApiResponse<unknown> = await response.json();
-        if (!response.ok) throw new Error((data as { detail?: string }).detail || 'Gagal memperbarui data karyawan');
-
-        if (data.status === 'success') {
-          setCashiers(cashiers.map(c => c.id === editingId ? { ...c, name: fullName, email, role: role as 'kasir' | 'supervisor' | 'manager', username } : c));
-          setIsModalOpen(false);
-          setModalError('');
-        }
+        setCashiers(cashiers.map(c => c.id === editingId ? { ...c, name: fullName, email, role: role as 'kasir' | 'supervisor' | 'manager', username } : c));
+        setIsModalOpen(false);
+        setModalError('');
       } else {
-        // Logika INSERT/TAMBAH data baru ke FastAPI
+        // Logika INSERT/TAMBAH data baru
         // Pastikan activeCafeId ada sebelum tambah
         if (!activeCafeId) {
           throw new Error('Silakan pilih cabang terlebih dahulu di navbar (refresh halaman jika belum ada)');
         }
 
-        const response = await fetch('https://fastapi-kasir.vercel.app/create-user', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            email, 
-            password, 
-            username, 
-            full_name: fullName, 
-            role,
-            cafe_id: activeCafeId // Gunakan activeCafeId dari dropdown cabang
-          }),
+        const result = await cashierService.createEmployee({ 
+          email, 
+          password, 
+          username, 
+          full_name: fullName, 
+          role,
+          cafe_id: activeCafeId // Gunakan activeCafeId dari dropdown cabang
         });
 
-        const data: ApiResponse<{ user_id: string }> = await response.json();
-        if (!response.ok) throw new Error((data as { detail?: string }).detail || 'Gagal mendaftarkan karyawan baru');
-
-        if (data.status === 'success') {
-          const newCashier: Cashier = {
-            id: data.data.user_id,
-            name: fullName,
-            email: email,
-            role: role as 'kasir' | 'supervisor' | 'manager',
-            username: username,
-          };
-          setCashiers([...cashiers, newCashier]);
-          setIsModalOpen(false);
-          setModalError('');
-        }
+        const newCashier: Cashier = {
+          id: result.user_id,
+          name: fullName,
+          email: email,
+          role: role as 'kasir' | 'supervisor' | 'manager',
+          username: username,
+        };
+        setCashiers([...cashiers, newCashier]);
+        setIsModalOpen(false);
+        setModalError('');
       }
     } catch (err) {
       const error = err as Error;
@@ -184,17 +141,10 @@ export default function CashiersPage() {
     if (!confirm('Apakah Anda yakin ingin menghapus akun karyawan ini dari ' + activeCafe?.name + '?')) return;
 
     try {
-      const response = await fetch(`https://fastapi-kasir.vercel.app/api/users/${id}`, {
-        method: 'DELETE',
-      });
-      const data: ApiResponse<unknown> = await response.json();
+      await cashierService.deleteEmployee(id);
 
-      if (!response.ok) throw new Error((data as { detail?: string }).detail || 'Gagal menghapus karyawan');
-
-      if (data.status === 'success') {
-        setCashiers(cashiers.filter(cashier => cashier.id !== id));
-        alert('Data karyawan berhasil dihapus dari ' + activeCafe?.name);
-      }
+      setCashiers(cashiers.filter(cashier => cashier.id !== id));
+      alert('Data karyawan berhasil dihapus dari ' + activeCafe?.name);
     } catch (err) {
       const error = err as Error;
       alert(error.message || 'Gagal menghapus data');

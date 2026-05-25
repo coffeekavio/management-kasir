@@ -18,18 +18,9 @@ export const DashboardLayout = ({ children }: DashboardLayoutProps) => {
   const router = useRouter();
 
   useEffect(() => {
-    // Check localStorage on mount
-    const savedUser = localStorage.getItem('user');
-    if (savedUser) {
-      try {
-        const userData = JSON.parse(savedUser);
-        setUser(userData);
-      } catch (err) {
-        console.error('Error parsing user data:', err);
-      }
-    }
+    // Mark as loaded (user data maintained in Zustand store)
     setIsLoaded(true);
-  }, [setUser]);
+  }, []);
 
   useEffect(() => {
     if (isLoaded && !isAuthenticated && !user) {

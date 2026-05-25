@@ -58,12 +58,9 @@ export const authService = {
       createdAt: new Date(),
     };
 
-    console.log('User data sebelum disimpan:', user);
+    console.log('Login berhasil:', { userId: user.id, email: user.email, role: user.role });
     
-    // Simpan ke localStorage
-    localStorage.setItem('user', JSON.stringify(user));
-    
-    // Set ke Zustand store (ini akan trigger update di ingredients page)
+    // Set ke Zustand store (user data disimpan di store, bukan localStorage)
     useAuthStore.getState().login(user);
     
     // Jika ada cafe_id, set ke activeCafeId
@@ -71,9 +68,6 @@ export const authService = {
       useAuthStore.getState().setActiveCafeId(user.cafe_id);
     }
 
-    // Verify localStorage
-    const savedUser = localStorage.getItem('user');
-    console.log('User data setelah disimpan:', JSON.parse(savedUser || '{}'));
     console.log('Store state:', useAuthStore.getState());
 
     return user;
@@ -81,7 +75,6 @@ export const authService = {
 
   logout: (): void => {
     localStorage.removeItem('token');
-    localStorage.removeItem('user');
     useAuthStore.getState().logout();
   },
 

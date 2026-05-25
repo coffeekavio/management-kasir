@@ -26,18 +26,15 @@ export const useAuthStore = create<AuthStore>((set) => ({
   cafeList: [],
   login: (user: User) => {
     set({ user, isAuthenticated: true, activeCafeId: user.cafe_id || null });
-    localStorage.setItem('user', JSON.stringify(user));
   },
   logout: () => {
     set({ user: null, isAuthenticated: false, activeCafeId: null, cafeList: [] });
-    localStorage.removeItem('user');
   },
   setUser: (user: User) => {
     set({ user, isAuthenticated: true, activeCafeId: user.cafe_id || null });
   },
   setActiveCafeId: (cafeId: string | null) => {
     set({ activeCafeId: cafeId });
-    if (cafeId) localStorage.setItem('activeCafeId', cafeId);
   },
   setCafeList: (cafes: Cafe[]) => {
     set({ cafeList: cafes });

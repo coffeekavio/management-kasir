@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Plus, Edit2, Trash2, Search, X, Save, RefreshCw } from 'lucide-react';
 import { Ingredient } from '@/types';
 import { formatCurrency } from '@/lib/utils';
-import { api } from '@/services/api';
+import { ingredientService } from '@/services/ingredientService';
 import { useAuthStore } from '@/lib/store';
 
 export default function IngredientsPage() {
@@ -25,7 +25,7 @@ export default function IngredientsPage() {
     cost: 0,
   });
 
-  // Fungsi fetch data dari FastAPI
+  // Fungsi fetch data bahan baku
   const fetchIngredients = useCallback(async () => {
     setIsLoading(true);
     try {
@@ -35,9 +35,8 @@ export default function IngredientsPage() {
         return;
       }
 
-      const response = await api.get<{ status: string; data: Ingredient[] }>(`/api/ingredients/?cafe_id=${activeCafeId}`);
-      // FastAPI mereturn: { status: "success", data: [...] }
-      setIngredients(response.data.data || []);
+      const data = await ingredientService.getIngredientsByCafe(activeCafeId);
+      setIngredients(data);
     } catch (error: unknown) {
       console.error('Gagal memuat data bahan baku:', error);
     } finally {
@@ -89,11 +88,11 @@ export default function IngredientsPage() {
       };
 
       if (editingIngredient) {
-        // EDIT: Kirim PUT ke FastAPI
-        await api.put(`/api/ingredients/${editingIngredient.id}`, payload);
+        // EDIT: Update ke server
+        await ingredientService.updateIngredient(editingIngredient.id, payload);
       } else {
-        // TAMBAH: Kirim POST ke FastAPI
-        await api.post('/api/ingredients/', payload);
+        // TAMBAH: Tambah baru ke server
+        await ingredientService.createIngredient(payload);
       }
       
       setIsModalOpen(false);
@@ -130,8 +129,8 @@ export default function IngredientsPage() {
       )
     ) {
       try {
-        // HAPUS: Kirim DELETE ke FastAPI
-        await api.delete(`/api/ingredients/${id}`);
+        // HAPUS: Hapus dari server
+        await ingredientService.deleteIngredient(id);
         setIngredients(ingredients.filter((ing) => ing.id !== id));
       } catch (error) {
         console.error('Gagal menghapus data:', error);

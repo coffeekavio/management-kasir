@@ -3,6 +3,7 @@
 import { useAuthStore } from '@/lib/store';
 import { Bell, Settings, User, ChevronDown } from 'lucide-react';
 import { useState, useEffect } from 'react';
+import { api } from '@/services/api';
 
 export const Navbar = () => {
   const user = useAuthStore((state) => state.user);
@@ -22,10 +23,13 @@ export const Navbar = () => {
       if (!user?.id) return;
       try {
         setLoadingCafes(true);
-        const response = await fetch(`https://fastapi-kasir.vercel.app/api/cafes?manager_id=${user.id}`);
-        const data = await response.json();
         
-        if (response.ok && data.status === 'success' && data.data) {
+        // MENGGUNAKAN AXIOS: Otomatis memakai URL VPS dari .env.local
+        // dan otomatis menyertakan Token (jika diperlukan)
+        const response = await api.get(`/api/cafes?manager_id=${user.id}`);
+        const data = response.data; // Axios otomatis mengubah response ke JSON
+        
+        if (data.status === 'success' && data.data) {
           setCafeList(data.data);
           // Set activeCafeId ke kafe pertama jika belum ada
           if (data.data.length > 0 && !activeCafeId) {
@@ -38,9 +42,9 @@ export const Navbar = () => {
         setLoadingCafes(false);
       }
     };
-
+    
     fetchManagerCafes();
-  }, [user?.id, activeCafeId, setCafeList, setActiveCafeId]);
+  }, [user?.id, activeCafeId]);
 
   return (
     <nav className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">

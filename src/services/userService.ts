@@ -17,9 +17,9 @@ export interface EmployeeData extends User {
 }
 
 export const userService = {
-  // GET: Mengambil data karyawan yang hanya berada di bawah naungan cafe milik Manager aktif
-  getEmployees: async (managerId: string) => {
-    return await api.get<ApiResponse<EmployeeData[]>>(`/api/users?manager_id=${managerId}`);
+  // UBAH DISINI: Ganti parameter managerId menjadi cafeId, dan ubah query URL-nya
+  getEmployees: async (cafeId: string) => {
+    return await api.get<ApiResponse<EmployeeData[]>>(`/api/users?cafe_id=${cafeId}`);
   },
 
   // POST: Mendaftarkan karyawan baru dengan mengunci relasi cafe_id

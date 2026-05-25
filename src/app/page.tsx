@@ -9,9 +9,8 @@ export default function Home() {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
 
   useEffect(() => {
-    // Check if user is authenticated from localStorage
-    const savedUser = localStorage.getItem('user');
-    if (savedUser || isAuthenticated) {
+    // Redirect based on authentication state from Zustand store
+    if (isAuthenticated) {
       router.push('/dashboard');
     } else {
       router.push('/login');

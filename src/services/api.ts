@@ -2,7 +2,7 @@
 
 import axios, { AxiosInstance } from 'axios';
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://fastapi-kasir.vercel.app';
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://103.150.92.223';
 
 // Buat instance axios dengan baseURL
 export const api: AxiosInstance = axios.create({
@@ -46,7 +46,6 @@ api.interceptors.response.use(
       // Token expired atau invalid
       if (typeof window !== 'undefined') {
         localStorage.removeItem('token');
-        localStorage.removeItem('user');
         window.location.href = '/login';
       }
     }
