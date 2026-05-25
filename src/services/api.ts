@@ -2,7 +2,7 @@
 
 import axios, { AxiosInstance } from 'axios';
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://103.150.92.223';
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://idol-audience-belongs-towards.trycloudflare.com';
 
 // Buat instance axios dengan baseURL
 export const api: AxiosInstance = axios.create({
