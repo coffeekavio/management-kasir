@@ -128,7 +128,7 @@ export const memberService = {
         return response.data.data;
       }
 
-      if (response.status === 200) {
+      if (response.status === 200 && response.data.data) {
         return response.data.data;
       }
 
@@ -165,7 +165,7 @@ export const memberService = {
         return response.data.data;
       }
 
-      if (response.status === 200) {
+      if (response.status === 200 && response.data.data) {
         return response.data.data;
       }
 
