@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, BarChart3, ShoppingCart, Users, Package, LogOut, Menu, X, Coffee } from 'lucide-react';
+import { Home, BarChart3, ShoppingCart, Users, Package, LogOut, Menu, X, Coffee, Gift } from 'lucide-react';
 import { useState } from 'react';
 import { useAuthStore } from '@/lib/store';
 
@@ -16,6 +16,7 @@ export const Sidebar = () => {
     { href: '/dashboard/transactions', icon: ShoppingCart, label: 'Transaksi' },
     { href: '/dashboard/analytics', icon: BarChart3, label: 'Analitik' },
     { href: '/dashboard/cashiers', icon: Users, label: 'Manajemen Kasir' },
+    { href: '/dashboard/members', icon: Gift, label: 'Member & Reward' },
     { href: '/dashboard/stock-opname', icon: Package, label: 'Stok Opname' },
     { href: '/dashboard/ingredients', icon: Coffee, label: 'Bahan Baku' },
     { href: '/dashboard/menus', icon: Package, label: 'Menu Jualan' },
