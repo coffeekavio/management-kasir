@@ -248,38 +248,30 @@ export const menuService = {
     try {
       console.log('Creating menu with payload:', payload);
       
-      // Try multiple endpoint patterns
-      const endpoints = [
-        '/api/create-menus',
-        '/api/menus',
-        '/create-menus',
-      ];
+      // Endpoint yang benar sesuai backend FastAPI
+      const response = await api.post<ApiResponse<Menu>>(
+        '/api/menus/create-menus',
+        payload
+      );
 
-      let response;
-      let lastError: any;
+      console.log('Create menu response:', response.data);
 
-      for (const endpoint of endpoints) {
-        try {
-          console.log(`Trying endpoint: ${endpoint}`);
-          if (endpoint === '/api/menus') {
-            response = await api.post<ApiResponse<Menu>>(endpoint, payload);
-          } else {
-            response = await api.post<ApiResponse<Menu>>(endpoint, payload);
-          }
-          console.log(`Success with endpoint: ${endpoint}`, response.data);
-          break;
-        } catch (e) {
-          lastError = e;
-          console.log(`Endpoint ${endpoint} failed, trying next...`);
-        }
-      }
-
-      if (!response) {
-        throw lastError || new Error('Semua endpoint create menu gagal');
-      }
-
-      if (response.data.data) {
-        return response.data.data;
+      if (response.data.status === 'success' || response.status === 201 || response.status === 200) {
+        // Backend mengembalikan success message, bukan data object
+        // Jadi kita return payload sebagai Menu object
+        return {
+          id: Math.random().toString(), // ID akan di-set oleh backend
+          name: payload.name,
+          description: payload.description || '',
+          price: payload.price,
+          categoryId: payload.category_id,
+          isAvailable: payload.is_available,
+          trackStock: payload.track_stock,
+          recipe: payload.recipe.map((r) => ({
+            ingredientId: r.ingredient_id,
+            quantity: r.quantity,
+          })),
+        };
       }
 
       throw new Error(response.data.detail || 'Gagal menambah menu');
