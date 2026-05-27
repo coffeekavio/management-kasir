@@ -47,38 +47,32 @@ export const Navbar = () => {
   }, [user?.id, activeCafeId]);
 
   return (
-    <nav className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
-      <div className="flex-1">
-        <h2 className="text-2xl font-bold text-gray-800">
+    <nav className="bg-white border-b border-gray-200 px-3 sm:px-6 py-3 sm:py-4 flex items-center justify-between">
+      <div className="flex-1 min-w-0">
+        <h2 className="hidden md:flex text-base sm:text-xl font-bold text-gray-800 truncate">
           Selamat datang, {user?.name}
         </h2>
-        <p className="text-sm text-gray-500">
-          {new Date().toLocaleDateString('id-ID', {
-            weekday: 'long',
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric',
-          })}
-        </p>
+        
       </div>
 
-      <div className="flex items-center gap-6">
+      <div className="flex items-center gap-2 sm:gap-6">
         {/* Dropdown Pilih Cabang - Hanya tampil jika ada lebih dari 1 kafe */}
         {cafeList.length > 0 && (
           <div className="relative">
             <button
               onClick={() => setShowCafeMenu(!showCafeMenu)}
               disabled={loadingCafes}
-              className="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 disabled:bg-gray-300 text-gray-800 rounded-lg transition-colors text-sm font-medium"
+              className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-gray-100 hover:bg-gray-200 disabled:bg-gray-300 text-gray-800 rounded-lg transition-colors text-xs sm:text-sm font-medium whitespace-nowrap"
             >
               <span className="text-gray-600">📍</span>
-              <span>{loadingCafes ? 'Loading...' : activeCafe?.name}</span>
+              <span className="hidden sm:inline">{loadingCafes ? 'Loading...' : activeCafe?.name}</span>
+              <span className="sm:hidden text-xs">{loadingCafes ? '...' : (activeCafe?.name?.split(' ')[0] || 'Kafe')}</span>
               {cafeList.length > 1 && <ChevronDown size={16} />}
             </button>
 
             {/* Dropdown menu - hanya tampil jika ada lebih dari 1 kafe */}
             {showCafeMenu && cafeList.length > 1 && (
-              <div className="absolute top-full left-0 mt-2 w-56 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
+              <div className="absolute top-full right-0 sm:left-0 mt-2 w-48 sm:w-56 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
                 <div className="p-3 border-b border-gray-200">
                   <p className="text-xs font-semibold text-gray-600 uppercase">Pilih Cabang ({cafeList.length})</p>
                 </div>
@@ -106,23 +100,23 @@ export const Navbar = () => {
         )}
 
         {/* Notifications */}
-        <button className="relative p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
+        {/* <button className="relative p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
           <Bell size={24} />
           <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
-        </button>
+        </button> */}
 
         {/* Settings */}
-        <button className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
+        {/* <button className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
           <Settings size={24} />
-        </button>
+        </button> */}
 
         {/* User Menu */}
         <div className="relative">
           <button
             onClick={() => setShowUserMenu(!showUserMenu)}
-            className="flex items-center gap-2 p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            className="flex items-center gap-2 p-2 hover:bg-gray-100 rounded-lg transition-colors ml-2"
           >
-            <div className="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center text-white">
+            <div className="w-10 h-10 bg-[#1976D2] rounded-full flex items-center justify-center text-white flex-shrink-0">
               <User size={20} />
             </div>
             <div className="text-left hidden sm:block">
@@ -133,13 +127,21 @@ export const Navbar = () => {
 
           {/* User Menu Dropdown */}
           {showUserMenu && (
-            <div className="absolute right-0 mt-2 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
+            <div className="absolute right-0 mt-2 w-56 sm:w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
               <div className="p-4 border-b border-gray-200">
                 <p className="text-sm font-semibold text-gray-800">{user?.name}</p>
                 <p className="text-xs text-gray-500">{user?.email}</p>
               </div>
               <div className="p-2">
-                <button className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded">
+                <p className="text-xs text-gray-500">
+                  {new Date().toLocaleDateString('id-ID', {
+                    weekday: 'long',
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric',
+                  })}
+                </p>
+                {/* <button className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded">
                   Profil
                 </button>
                 <button className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded">
@@ -154,7 +156,7 @@ export const Navbar = () => {
                   className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 rounded"
                 >
                   Logout
-                </button>
+                </button> */}
               </div>
             </div>
           )}
