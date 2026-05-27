@@ -44,7 +44,7 @@ export default function LoginPage() {
   return (
     <div className="relative min-h-screen">
       <Image src={bg} alt="background" fill className="object-cover" priority />
-      <div className="absolute inset-0 bg-gradient-to-br from-blue-600/80 to-blue-600/60" />
+      <div className="absolute inset-0 bg-gradient-to-br from-[#42A5F5] to-[#90CAF9" />
 
       {/* Logo fixed left */}
       <div className="absolute left-4 top-4 z-20 flex items-center gap-3">
@@ -130,7 +130,7 @@ export default function LoginPage() {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-semibold py-2 rounded-lg transition-colors duration-200 shadow-md"
+                className="w-full bg-[#1E88E5] hover:bg-[#1565C0] disabled:bg-gray-400 text-white font-semibold py-2 rounded-lg transition-colors duration-200 shadow-md"
               >
                 {loading ? 'Memproses Autentikasi...' : 'Login'}
               </button>
