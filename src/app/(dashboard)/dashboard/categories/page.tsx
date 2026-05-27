@@ -1,13 +1,24 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { Plus, Edit2, Trash2, Search, X, Save, RefreshCw } from 'lucide-react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { Plus, Edit2, Trash2, X, Save } from 'lucide-react';
 import { menuService, type Category } from '@/services/menuService';
 import { useAuthStore } from '@/lib/store';
+import {
+  MaterialReactTable,
+  useMaterialReactTable,
+  type MRT_ColumnDef,
+} from 'material-react-table';
+import {
+  modalConfirm,
+  modalDeleteConfirm,
+  modalLoading,
+  modalSuccess,
+  modalError as showModalError,
+} from '@/components/Modals';
 
 export default function CategoriesPage() {
   const [categories, setCategories] = useState<Category[]>([]);
-  const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
@@ -25,7 +36,6 @@ export default function CategoriesPage() {
     setIsLoading(true);
     try {
       if (!activeCafeId) {
-        setIsLoading(false);
         return;
       }
 
@@ -33,7 +43,6 @@ export default function CategoriesPage() {
       setCategories(data);
     } catch (error: unknown) {
       console.error('Gagal memuat data kategori:', error);
-      alert('Gagal memuat data kategori');
     } finally {
       setIsLoading(false);
     }
@@ -68,24 +77,38 @@ export default function CategoriesPage() {
     if (!formData.name.trim()) return;
 
     if (!activeCafeId) {
-      alert('Error: Silakan pilih cafe terlebih dahulu dari dropdown di navbar');
+      showModalError('Cafe Belum Dipilih', 'Silakan pilih cafe terlebih dahulu dari dropdown di navbar');
+      return;
+    }
+
+    const confirmed = await modalConfirm(
+      editingCategory ? 'Simpan perubahan kategori?' : 'Tambah kategori baru?',
+      editingCategory
+        ? 'Perubahan kategori akan disimpan ke server.'
+        : 'Data kategori baru akan ditambahkan ke server.',
+      'Ya, Simpan',
+      'Batal',
+      'question'
+    );
+
+    if (!confirmed) {
       return;
     }
 
     try {
+      modalLoading('Menyimpan kategori...');
+
       if (editingCategory) {
-        // EDIT: Update kategori - pass cafeId sebagai parameter
         await menuService.updateCategory(editingCategory.id, formData.name, activeCafeId);
-        alert('Kategori berhasil diperbarui!');
+        modalSuccess('Berhasil', 'Kategori berhasil diperbarui!');
       } else {
-        // TAMBAH: Tambah kategori baru
         await menuService.createCategory(activeCafeId, formData.name);
-        alert('Kategori berhasil ditambahkan!');
+        modalSuccess('Berhasil', 'Kategori berhasil ditambahkan!');
       }
 
       setIsModalOpen(false);
       setFormData({ name: '' });
-      fetchCategories(); // Refresh data
+      fetchCategories();
     } catch (error: unknown) {
       console.error('Gagal menyimpan kategori:', error);
 
@@ -127,61 +150,120 @@ export default function CategoriesPage() {
         errorMessage = JSON.stringify(error);
       }
 
-      alert(`Error: ${errorMessage}`);
+      showModalError('Gagal Menyimpan Kategori', errorMessage);
     }
   };
 
   // Menangani Hapus Data
   const handleDelete = async (id: string) => {
-    if (confirm('Apakah Anda yakin ingin menghapus kategori ini? Kategori yang terikat menu tidak bisa dihapus.')) {
-      try {
-        // Pass cafeId sebagai parameter
-        await menuService.deleteCategory(id, activeCafeId);
-        setCategories(categories.filter((c) => c.id !== id));
-        alert('Kategori berhasil dihapus!');
-      } catch (error) {
-        console.error('Gagal menghapus kategori:', error);
+    const confirmed = await modalDeleteConfirm(
+      'Kategori Menu',
+      'Kategori yang terikat menu tidak bisa dihapus.'
+    );
 
-        let errorMessage = 'Gagal menghapus kategori dari server.';
+    if (!confirmed) {
+      return;
+    }
 
-        if (error instanceof Error) {
-          console.log('Delete error type:', error.name);
-          console.log('Delete error message:', error.message);
-          console.log('Delete error properties:', error);
-          
-          // Try to extract error detail from response
-          if (
-            'response' in error &&
-            typeof error.response === 'object' &&
-            error.response !== null
-          ) {
-            const response = error.response as any;
-            if (response.data?.detail) {
-              errorMessage = response.data.detail;
-            } else if (response.data?.message) {
-              errorMessage = response.data.message;
-            } else if (response.statusText) {
-              errorMessage = response.statusText;
-            } else {
-              errorMessage = error.message;
-            }
+    try {
+      modalLoading('Menghapus kategori...');
+      await menuService.deleteCategory(id, activeCafeId);
+      setCategories((prev) => prev.filter((c) => c.id !== id));
+      modalSuccess('Terhapus', 'Kategori berhasil dihapus!');
+    } catch (error) {
+      console.error('Gagal menghapus kategori:', error);
+
+      let errorMessage = 'Gagal menghapus kategori dari server.';
+
+      if (error instanceof Error) {
+        if ('response' in error && typeof error.response === 'object' && error.response !== null) {
+          const response = error.response as any;
+          if (response.data?.detail) {
+            errorMessage = response.data.detail;
+          } else if (response.data?.message) {
+            errorMessage = response.data.message;
+          } else if (response.statusText) {
+            errorMessage = response.statusText;
           } else {
             errorMessage = error.message;
           }
         } else {
-          console.log('Unknown delete error type:', typeof error, error);
-          errorMessage = JSON.stringify(error);
+          errorMessage = error.message;
         }
-
-        alert(`Error: ${errorMessage}`);
+      } else {
+        errorMessage = JSON.stringify(error);
       }
+
+      showModalError('Gagal Menghapus Kategori', errorMessage);
     }
   };
 
-  // Pencarian realtime
-  const filteredCategories = categories.filter((cat) =>
-    cat.name.toLowerCase().includes(searchQuery.toLowerCase())
+  const columns = useMemo<MRT_ColumnDef<Category>[]>(
+    () => [
+      {
+        id: 'no',
+        header: 'No',
+        size: 70,
+        enableSorting: false,
+        Cell: ({ row, table }) => {
+          const { pageIndex, pageSize } = table.getState().pagination;
+          return pageIndex * pageSize + row.index + 1;
+        },
+      },
+      {
+        accessorKey: 'name',
+        header: 'Nama Kategori',
+      },
+      {
+        id: 'actions',
+        header: 'Aksi',
+        size: 120,
+        enableSorting: false,
+        Cell: ({ row }) => (
+          <div className="flex items-center justify-center gap-3">
+            <button
+              onClick={() => handleOpenEditModal(row.original)}
+              className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors"
+              title="Ubah Kategori"
+            >
+              <Edit2 size={16} />
+            </button>
+            <button
+              onClick={() => handleDelete(row.original.id)}
+              className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
+              title="Hapus Kategori"
+            >
+              <Trash2 size={16} />
+            </button>
+          </div>
+        ),
+      },
+    ],
+    [handleDelete, handleOpenEditModal]
   );
+
+  const table = useMaterialReactTable({
+    columns,
+    data: categories,
+    state: {
+      isLoading,
+    },
+    enableGlobalFilter: true,
+    enableSorting: true,
+    enablePagination: true,
+    enableColumnFilters: false,
+    initialState: {
+      pagination: {
+        pageIndex: 0,
+        pageSize: 10,
+      },
+    },
+    muiSearchTextFieldProps: {
+      placeholder: 'Cari nama kategori...',
+      variant: 'outlined',
+      size: 'small',
+    },
+  });
 
   return (
     <div className="space-y-6">
@@ -200,79 +282,9 @@ export default function CategoriesPage() {
         </button>
       </div>
 
-      {/* Filter & Kontrol Cari */}
-      <div className="bg-white rounded-lg shadow-sm p-4 flex items-center border border-gray-100">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-2.5 text-gray-400" size={18} />
-          <input
-            type="text"
-            placeholder="Cari nama kategori (misal: Minuman, Makanan)..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-gray-700"
-          />
-        </div>
-      </div>
-
       {/* Tabel Data Kategori */}
       <div className="bg-white rounded-lg shadow-md overflow-hidden border border-gray-200">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-gray-50 border-b border-gray-200">
-              <tr>
-                <th className="px-6 py-3 text-left font-semibold text-gray-700">Nama Kategori</th>
-                <th className="px-6 py-3 text-center font-semibold text-gray-700">Aksi</th>
-              </tr>
-            </thead>
-            <tbody>
-              {isLoading ? (
-                <tr>
-                  <td colSpan={2} className="text-center py-8 text-gray-500">
-                    <RefreshCw className="animate-spin inline mr-2" size={18} />
-                    Memuat data kategori...
-                  </td>
-                </tr>
-              ) : filteredCategories.length === 0 ? (
-                <tr>
-                  <td colSpan={2} className="text-center py-8 text-gray-500">
-                    Tidak ada data kategori ditemukan.
-                  </td>
-                </tr>
-              ) : (
-                filteredCategories.map((item, idx) => (
-                  <tr
-                    key={item.id}
-                    className={`border-b border-gray-100 last:border-none ${
-                      idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'
-                    } hover:bg-blue-50/40 transition-colors`}
-                  >
-                    <td className="px-6 py-4">
-                      <p className="font-semibold text-gray-800">{item.name}</p>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center justify-center gap-3">
-                        <button
-                          onClick={() => handleOpenEditModal(item)}
-                          className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors"
-                          title="Ubah Kategori"
-                        >
-                          <Edit2 size={16} />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(item.id)}
-                          className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
-                          title="Hapus Kategori"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+        <MaterialReactTable table={table} />
       </div>
 
       {/* MODAL OVERLAY (TAMBAH & EDIT FORM) */}

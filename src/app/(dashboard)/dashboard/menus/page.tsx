@@ -1,19 +1,31 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { Plus, Edit2, Trash2, Search, X, Save, Coffee, Layers, Eye, EyeOff, CheckSquare, Square, Trash } from 'lucide-react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { Plus, Edit2, Trash2, X, Save, Coffee, Layers, Eye, EyeOff, CheckSquare, Square, Trash } from 'lucide-react';
 import Link from 'next/link';
 import { formatCurrency } from '@/lib/utils';
 import { menuService, type Category, type Ingredient, type RecipeItemInput, type Menu } from '@/services/menuService';
 import { useAuthStore } from '@/lib/store';
+import {
+  MaterialReactTable,
+  useMaterialReactTable,
+  type MRT_ColumnDef,
+} from 'material-react-table';
+import {
+  modalConfirm,
+  modalDeleteConfirm,
+  modalLoading,
+  modalSuccess,
+  modalError as showModalError,
+} from '@/components/Modals';
 
 export default function MenusPage() {
   const [menus, setMenus] = useState<Menu[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
   
-  const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('all');
+  const [isLoading, setIsLoading] = useState(false);
 
   // Get activeCafeId dari Zustand store
   const activeCafeId = useAuthStore((state) => state.activeCafeId);
@@ -62,6 +74,8 @@ export default function MenusPage() {
         return;
       }
 
+      setIsLoading(true);
+
       // 1. Fetch Kategori
       const categoriesData = await menuService.getCategories(activeCafeId);
       setCategories(categoriesData);
@@ -75,6 +89,8 @@ export default function MenusPage() {
       setMenus(menusData);
     } catch (error: unknown) {
       console.error('Gagal mengambil data master menu:', error);
+    } finally {
+      setIsLoading(false);
     }
   }, [activeCafeId]);
 
@@ -152,11 +168,27 @@ export default function MenusPage() {
       return;
     }
 
+    const saveConfirmed = await modalConfirm(
+      editingMenu ? 'Simpan perubahan menu?' : 'Tambah menu baru?',
+      editingMenu
+        ? 'Perubahan data menu akan disimpan ke server.'
+        : 'Data menu baru akan ditambahkan ke server.',
+      'Ya, Simpan',
+      'Batal',
+      'question'
+    );
+
+    if (!saveConfirmed) {
+      return;
+    }
+
     try {
       if (!activeCafeId) {
         alert('ID Kafe tidak ditemukan. Silakan login ulang.');
         return;
       }
+
+      modalLoading('Menyimpan menu...');
 
       // Mempersiapkan payload data
       const payload = {
@@ -179,11 +211,11 @@ export default function MenusPage() {
       if (editingMenu) {
         // EDIT MENU
         await menuService.updateMenu(editingMenu.id, payload);
-        alert(`Menu "${menuForm.name}" berhasil diperbarui!`);
+        modalSuccess('Berhasil', `Menu "${menuForm.name}" berhasil diperbarui!`);
       } else {
         // TAMBAH MENU BARU
         await menuService.createMenu(payload);
-        alert(`Menu "${menuForm.name}" berhasil ditambahkan ke kasir!`);
+        modalSuccess('Berhasil', `Menu "${menuForm.name}" berhasil ditambahkan ke kasir!`);
       }
 
       // Tutup modal dan refresh data dari database
@@ -193,28 +225,153 @@ export default function MenusPage() {
     } catch (error: unknown) {
       console.error('Gagal menyimpan menu:', error);
       const errorMsg = error instanceof Error && 'response' in error && typeof error.response === 'object' && error.response !== null && 'data' in error.response && typeof error.response.data === 'object' && error.response.data !== null && 'detail' in error.response.data ? (error.response.data as { detail: string }).detail : 'Terjadi kesalahan pada server.';
-      alert(`Gagal menyimpan menu: ${errorMsg}`);
+      showModalError('Gagal Menyimpan Menu', errorMsg);
     }
   };
 
   // Hapus Menu
   const handleDeleteMenu = async (id: string) => {
-    if (confirm('Apakah Anda yakin ingin menghapus produk jualan ini?')) {
-      try {
-        await menuService.deleteMenu(id);
-        setMenus(menus.filter((m) => m.id !== id));
-      } catch (err: unknown) {
-        console.error('Gagal menghapus menu:', err);
-        alert('Gagal menghapus menu');
-      }
+    const confirmed = await modalDeleteConfirm('Menu Jualan', 'Produk jualan ini akan dihapus dari sistem');
+
+    if (!confirmed) return;
+
+    try {
+      modalLoading('Menghapus menu...');
+      await menuService.deleteMenu(id);
+      setMenus((prev) => prev.filter((m) => m.id !== id));
+      modalSuccess('Terhapus', 'Menu berhasil dihapus');
+    } catch (err: unknown) {
+      console.error('Gagal menghapus menu:', err);
+      const errorMsg = err instanceof Error ? err.message : 'Gagal menghapus menu';
+      showModalError('Gagal Menghapus Menu', errorMsg);
     }
   };
 
-  // Filter & Pencarian Menu Realtime
-  const filteredMenus = menus.filter((menu) => {
-    const matchesSearch = menu.name.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesCategory = selectedCategoryFilter === 'all' || menu.categoryId === selectedCategoryFilter;
-    return matchesSearch && matchesCategory;
+  const filteredMenus = useMemo(() => menus.filter((menu) => (
+    selectedCategoryFilter === 'all' || menu.categoryId === selectedCategoryFilter
+  )), [menus, selectedCategoryFilter]);
+
+  const columns = useMemo<MRT_ColumnDef<Menu>[]>(
+    () => [
+      {
+        id: 'no',
+        header: 'No',
+        size: 60,
+        enableSorting: false,
+        Cell: ({ row, table }) => {
+          const { pageIndex, pageSize } = table.getState().pagination || { pageIndex: 0, pageSize: 10 };
+          return pageIndex * pageSize + row.index + 1;
+        },
+      },
+      {
+        accessorKey: 'name',
+        header: 'Nama Menu',
+      },
+      {
+        accessorKey: 'categoryId',
+        header: 'Kategori',
+        Cell: ({ cell }) => {
+          const catName = categories.find((c) => c.id === cell.getValue<string>())?.name || '-';
+          return <span className="font-medium text-gray-700">{catName}</span>;
+        },
+      },
+      {
+        accessorKey: 'price',
+        header: 'Harga',
+        Cell: ({ cell }) => formatCurrency(cell.getValue<number>() || 0),
+      },
+      {
+        accessorKey: 'trackStock',
+        header: 'Resep',
+        Cell: ({ cell, row }) => (cell.getValue<boolean>() ? `${row.original.recipe?.length || 0} bahan` : 'Instan'),
+      },
+      {
+        accessorKey: 'isAvailable',
+        header: 'Status',
+        Cell: ({ cell }) => (
+          <span className={`px-2 py-1 rounded-full text-xs font-semibold ${cell.getValue<boolean>() ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+            {cell.getValue<boolean>() ? 'Aktif' : 'Nonaktif'}
+          </span>
+        ),
+      },
+      {
+        id: 'actions',
+        header: 'Aksi',
+        enableSorting: false,
+        Cell: ({ row }) => (
+          <div className="flex items-center justify-end gap-2">
+            <button
+              onClick={() => handleOpenEditMenu(row.original)}
+              className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700 px-2 py-1 rounded hover:bg-blue-50"
+            >
+              <Edit2 size={13} />
+              Ubah
+            </button>
+            <button
+              onClick={() => handleDeleteMenu(row.original.id)}
+              className="inline-flex items-center gap-1 text-xs font-semibold text-red-600 hover:text-red-700 px-2 py-1 rounded hover:bg-red-50"
+            >
+              <Trash2 size={13} />
+              Hapus
+            </button>
+          </div>
+        ),
+      },
+    ],
+    [categories]
+  );
+
+  const table = useMaterialReactTable({
+    columns,
+    data: filteredMenus,
+    state: {
+      isLoading,
+    },
+    enableColumnFilterModes: true,
+    enableGlobalFilter: true,
+    enablePagination: true,
+    enableSorting: true,
+    initialState: {
+      pagination: {
+        pageIndex: 0,
+        pageSize: 10,
+      },
+    },
+    muiTableProps: {
+      sx: {
+        borderCollapse: 'collapse',
+      },
+    },
+    muiTableHeadCellProps: {
+      sx: {
+        backgroundColor: '#f9fafb',
+        borderBottom: '1px solid #e5e7eb',
+        padding: '12px 16px',
+        fontWeight: 600,
+        fontSize: '0.875rem',
+        color: '#374151',
+      },
+    },
+    muiTableBodyCellProps: {
+      sx: {
+        padding: '12px 16px',
+        fontSize: '0.875rem',
+      },
+    },
+    muiTableBodyRowProps: {
+      sx: {
+        '&:hover': {
+          backgroundColor: '#f0f4f8',
+        },
+        borderBottom: '1px solid #f3f4f6',
+      },
+    },
+    muiSearchTextFieldProps: {
+      placeholder: 'Cari nama menu...',
+      variant: 'outlined',
+      size: 'small',
+      fullWidth: false,
+    },
   });
 
   return (
@@ -242,24 +399,13 @@ export default function MenusPage() {
         </div>
       </div>
 
-      {/* Kontrol Cari & Filter Kategori */}
+      {/* Kontrol Filter Kategori */}
       <div className="bg-white rounded-lg shadow-sm p-4 flex flex-col md:flex-row gap-4 border border-gray-100">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-2.5 text-gray-400" size={18} />
-          <input
-            type="text"
-            placeholder="Cari nama menu (misal: Latte, Croissant)..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-gray-700 text-sm"
-          />
-        </div>
-        <div className="flex items-center gap-2 overflow-x-auto pb-1 md:pb-0">
+        <div className="flex-1 flex items-center gap-3 flex-wrap">
+          <div className="text-sm font-semibold text-gray-700">Filter Kategori:</div>
           <button
             onClick={() => setSelectedCategoryFilter('all')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors ${
-              selectedCategoryFilter === 'all' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-            }`}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors ${selectedCategoryFilter === 'all' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
           >
             Semua Produk
           </button>
@@ -267,9 +413,7 @@ export default function MenusPage() {
             <button
               key={cat.id}
               onClick={() => setSelectedCategoryFilter(cat.id)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors ${
-                selectedCategoryFilter === cat.id ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors ${selectedCategoryFilter === cat.id ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
             >
               {cat.name}
             </button>
@@ -277,76 +421,11 @@ export default function MenusPage() {
         </div>
       </div>
 
-      {/* Grid List Menu Jualan */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredMenus.map((menu) => {
-          const catName = categories.find((c) => c.id === menu.categoryId)?.name || 'Uncategorized';
-          return (
-            <div
-              key={menu.id}
-              className={`bg-white rounded-xl shadow-md overflow-hidden border transition-all hover:shadow-lg flex flex-col justify-between ${
-                menu.isAvailable ? 'border-gray-100' : 'border-gray-200 bg-gray-50/50'
-              }`}
-            >
-              <div className="p-5 space-y-3">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <span className="text-[10px] uppercase tracking-wider bg-blue-50 text-blue-600 border border-blue-100 px-2 py-0.5 rounded font-bold">
-                      {catName}
-                    </span>
-                    <h3 className={`font-bold text-lg mt-1 ${menu.isAvailable ? 'text-gray-800' : 'text-gray-400 line-through'}`}>
-                      {menu.name}
-                    </h3>
-                  </div>
-                  <span className="font-bold text-blue-600 text-sm bg-blue-50/50 px-2 py-1 rounded-md">
-                    {formatCurrency(menu.price)}
-                  </span>
-                </div>
-
-                <p className="text-gray-500 text-xs line-clamp-2">{menu.description || 'Tidak ada deskripsi.'}</p>
-
-                {/* Indikator Pelacakan Stok Gudang */}
-                <div className="pt-2 flex flex-wrap gap-2">
-                  {menu.trackStock ? (
-                    <span className="text-[11px] font-semibold text-purple-700 bg-purple-50 px-2 py-0.5 rounded-md flex items-center gap-1 border border-purple-100">
-                      <Coffee size={12} /> Lacak Stok Gudang ({menu.recipe?.length || 0} Bahan)
-                    </span>
-                  ) : (
-                    <span className="text-[11px] font-semibold text-gray-500 bg-gray-100 px-2 py-0.5 rounded-md border border-gray-200">
-                      Instan (Tanpa Bahan Baku)
-                    </span>
-                  )}
-
-                  {menu.isAvailable ? (
-                    <span className="text-[11px] font-semibold text-green-700 bg-green-50 px-2 py-0.5 rounded-md flex items-center gap-1 border border-green-100">
-                      <Eye size={12} /> Aktif di Kasir
-                    </span>
-                  ) : (
-                    <span className="text-[11px] font-semibold text-red-700 bg-red-50 px-2 py-0.5 rounded-md flex items-center gap-1 border border-red-100">
-                      <EyeOff size={12} /> Buram/Kosong
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              {/* Tombol Kontrol Bawah Card */}
-              <div className="bg-gray-50 border-t border-gray-100 px-5 py-3 flex items-center justify-end gap-3">
-                <button
-                  onClick={() => handleOpenEditMenu(menu)}
-                  className="flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700"
-                >
-                  <Edit2 size={13} /> Ubah
-                </button>
-                <button
-                  onClick={() => handleDeleteMenu(menu.id)}
-                  className="flex items-center gap-1 text-xs font-semibold text-red-600 hover:text-red-700"
-                >
-                  <Trash2 size={13} /> Hapus
-                </button>
-              </div>
-            </div>
-          );
-        })}
+      {/* Table Menu Jualan */}
+      <div className="bg-white rounded-lg shadow-md border border-gray-100 overflow-hidden">
+        <div className="min-w-full">
+          <MaterialReactTable table={table} />
+        </div>
       </div>
 
       {/* ======================================================== */}
