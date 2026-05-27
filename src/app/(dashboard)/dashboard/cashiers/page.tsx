@@ -1,9 +1,15 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuthStore } from '@/lib/store';
 import { Eye, EyeOff, Plus, Shield, ClipboardCheck, User, X, Edit2, Trash2 } from 'lucide-react';
 import { cashierService, type Cashier } from '@/services/cashierService';
+import {
+  MaterialReactTable,
+  useMaterialReactTable,
+  type MRT_ColumnDef,
+} from 'material-react-table';
+import { modalDeleteConfirm, modalLoading, modalSuccess, modalError as showModalError, toastSuccess } from '@/components/Modals';
 
 export default function CashiersPage() {
   const [showPassword, setShowPassword] = useState(false);
@@ -101,6 +107,7 @@ export default function CashiersPage() {
         setCashiers(cashiers.map(c => c.id === editingId ? { ...c, name: fullName, email, role: role as 'kasir' | 'supervisor' | 'manager', username } : c));
         setIsModalOpen(false);
         setModalError('');
+        modalSuccess('Berhasil', 'Data karyawan berhasil diperbarui');
       } else {
         // Logika INSERT/TAMBAH data baru
         // Pastikan activeCafeId ada sebelum tambah
@@ -127,6 +134,7 @@ export default function CashiersPage() {
         setCashiers([...cashiers, newCashier]);
         setIsModalOpen(false);
         setModalError('');
+        modalSuccess('Berhasil', 'Data karyawan berhasil ditambahkan');
       }
     } catch (err) {
       const error = err as Error;
@@ -136,18 +144,19 @@ export default function CashiersPage() {
     }
   };
 
-  // 3. INTEGRASI DELETE: Menghapus akun karyawan
+  // 3. INTEGRASI DELETE: Menghapus akun karyawan (gunakan shared modal helpers)
   const handleDelete = async (id: string) => {
-    if (!confirm('Apakah Anda yakin ingin menghapus akun karyawan ini dari ' + activeCafe?.name + '?')) return;
+    const confirmed = await modalDeleteConfirm('Akun Karyawan', `ID: ${id}`);
+    if (!confirmed) return;
 
     try {
+      modalLoading('Menghapus data karyawan...');
       await cashierService.deleteEmployee(id);
-
-      setCashiers(cashiers.filter(cashier => cashier.id !== id));
-      alert('Data karyawan berhasil dihapus dari ' + activeCafe?.name);
+      setCashiers((prev) => prev.filter((cashier) => cashier.id !== id));
+      modalSuccess('Terhapus', 'Data karyawan berhasil dihapus');
     } catch (err) {
       const error = err as Error;
-      alert(error.message || 'Gagal menghapus data');
+      showModalError('Gagal', error.message || 'Gagal menghapus data');
     }
   };
 
@@ -186,80 +195,95 @@ export default function CashiersPage() {
         </div>
       )}
 
-      {/* Tampilan Tabel Utama */}
+      {/* Tampilan Tabel Utama (MaterialReactTable) */}
       <div className="bg-white rounded-xl shadow-xs border border-gray-200 overflow-hidden">
-        <table className="w-full text-left border-collapse">
-          <thead>
-            <tr className="bg-gray-50 border-b border-gray-200 text-gray-700 font-semibold">
-              <th className="p-4">Nama</th>
-              <th className="p-4">Username</th>
-              <th className="p-4">Email</th>
-              <th className="p-4">Role</th>
-              {currentUser?.role === 'manager' && <th className="p-4 text-center">Aksi</th>}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-200 text-gray-600">
-            {pageLoading ? (
-              <tr>
-                <td colSpan={currentUser?.role === 'manager' ? 5 : 4} className="p-4 text-center text-gray-400 animate-pulse">
-                  Memuat data karyawan dari server...
-                </td>
-              </tr>
-            ) : cashiers.length === 0 ? (
-              <tr>
-                <td colSpan={currentUser?.role === 'manager' ? 5 : 4} className="p-4 text-center text-gray-400">
-                  Belum ada data staf kasir, supervisor, atau karyawan terdaftar.
-                </td>
-              </tr>
-            ) : (
-              cashiers.map((cashier) => (
-                <tr key={cashier.id} className="hover:bg-gray-50 transition">
-                  <td className="p-4 font-medium text-gray-800">{cashier.name}</td>
-                  <td className="p-4">@{cashier.username}</td>
-                  <td className="p-4">{cashier.email}</td>
-                  <td className="p-4">
-                    <span
-                      className={`px-2 py-1 rounded-full text-xs font-semibold inline-flex items-center gap-1 ${
-                        cashier.role === 'manager'
-                          ? 'bg-purple-100 text-purple-700'
-                          : cashier.role === 'supervisor'
-                          ? 'bg-amber-100 text-amber-700'
-                          : 'bg-blue-100 text-blue-700'
-                      }`}
-                    >
-                      {cashier.role === 'manager' ? (
-                        <Shield size={12} />
-                      ) : cashier.role === 'supervisor' ? (
-                        <ClipboardCheck size={12} />
-                      ) : (
-                        <User size={12} />
-                      )}
-                      {cashier.role.charAt(0).toUpperCase() + cashier.role.slice(1)}
-                    </span>
-                  </td>
-                  {currentUser?.role === 'manager' && (
-                    <td className="p-4 text-center flex justify-center gap-3">
+        <div className="min-w-full">
+          <MaterialReactTable table={useMaterialReactTable({
+            columns: useMemo<MRT_ColumnDef<Cashier>[]>(
+              () => [
+                {
+                  id: 'no',
+                  header: 'No',
+                  size: 60,
+                  enableSorting: false,
+                  Cell: ({ row, table }) => {
+                    const { pageIndex, pageSize } = table.getState().pagination || { pageIndex: 0, pageSize: 10 };
+                    return pageIndex * pageSize + row.index + 1;
+                  },
+                },
+                {
+                  accessorKey: 'name',
+                  header: 'Nama',
+                },
+                {
+                  accessorKey: 'username',
+                  header: 'Username',
+                  Cell: ({ cell }) => `@${cell.getValue<string>()}`,
+                },
+                {
+                  accessorKey: 'email',
+                  header: 'Email',
+                },
+                {
+                  accessorKey: 'role',
+                  header: 'Role',
+                  Cell: ({ cell }) => {
+                    const role = cell.getValue<string>();
+                    return (
+                      <span
+                        className={`px-2 py-1 rounded-full text-xs font-semibold inline-flex items-center gap-1 ${
+                          role === 'manager'
+                            ? 'bg-purple-100 text-purple-700'
+                            : role === 'supervisor'
+                            ? 'bg-amber-100 text-amber-700'
+                            : 'bg-blue-100 text-blue-700'
+                        }`}
+                      >
+                        {role === 'manager' ? <Shield size={12} /> : role === 'supervisor' ? <ClipboardCheck size={12} /> : <User size={12} />}
+                        {role.charAt(0).toUpperCase() + role.slice(1)}
+                      </span>
+                    );
+                  },
+                },
+                {
+                  id: 'actions',
+                  header: 'Aksi',
+                  enableSorting: false,
+                  Cell: ({ row }) => (
+                    <div className="flex items-center justify-center gap-2">
                       <button
-                        onClick={() => handleOpenEditModal(cashier)}
-                        className="text-blue-600 hover:text-blue-800 transition"
-                        title="Edit Data"
+                        onClick={() => handleOpenEditModal(row.original)}
+                        className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                        title="Edit"
                       >
                         <Edit2 size={16} />
                       </button>
                       <button
-                        onClick={() => handleDelete(cashier.id)}
-                        className="text-red-600 hover:text-red-800 transition"
-                        title="Hapus Akun"
+                        onClick={() => handleDelete(row.original.id)}
+                        className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
+                        title="Hapus"
                       >
                         <Trash2 size={16} />
                       </button>
-                    </td>
-                  )}
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+                    </div>
+                  ),
+                },
+              ],
+              []
+            ),
+            data: cashiers,
+            state: { isLoading: pageLoading },
+            enableColumnFilterModes: true,
+            enableGlobalFilter: true,
+            enablePagination: true,
+            enableSorting: true,
+            initialState: { pagination: { pageIndex: 0, pageSize: 10 } },
+            muiTableProps: { sx: { borderCollapse: 'collapse' } },
+            muiTableHeadCellProps: { sx: { backgroundColor: '#f9fafb' } },
+            muiTableBodyCellProps: { sx: { padding: '12px 16px' } },
+            muiSearchTextFieldProps: { placeholder: 'Cari karyawan...', variant: 'outlined', size: 'small', fullWidth: false },
+          })} />
+        </div>
       </div>
 
       {/* Modal Popup Form (Digunakan Bersama untuk Tambah / Edit Karyawan) */}
