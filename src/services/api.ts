@@ -52,7 +52,7 @@ api.interceptors.response.use(
 
     // Handle network errors
     if (error.code === 'ERR_NETWORK' || !error.response) {
-      const networkErr = new Error('Network Error - Pastikan API Server sedang berjalan') as Error & { response?: unknown; detail?: string };
+      const networkErr = new Error('Eror') as Error & { response?: unknown; detail?: string };
       networkErr.response = error.response;
       networkErr.detail = error.message;
       throw networkErr;
