@@ -6,6 +6,7 @@ import { Ingredient } from '@/types';
 import { formatCurrency } from '@/lib/utils';
 import { ingredientService } from '@/services/ingredientService';
 import { useAuthStore } from '@/lib/store';
+import { useCrudAlert } from '@/hooks/useAlert';
 import {
   MaterialReactTable,
   useMaterialReactTable,
@@ -20,6 +21,7 @@ export default function IngredientsPage() {
   const [editingIngredient, setEditingIngredient] = useState<Ingredient | null>(null);
 
   const activeCafeId = useAuthStore((state) => state.activeCafeId);
+  const alert = useCrudAlert();
 
   const [formData, setFormData] = useState({
     name: '',
@@ -49,7 +51,7 @@ export default function IngredientsPage() {
       {
         accessorKey: 'name',
         header: 'Nama Bahan',
-        size: 200,
+        size: window.innerWidth < 768 ? 120 : 200,
       },
       {
         accessorKey: 'stock',
@@ -175,23 +177,27 @@ export default function IngredientsPage() {
     if (!formData.name.trim()) return;
 
     if (!activeCafeId) {
-      alert('Error: Silakan pilih cafe terlebih dahulu dari dropdown di navbar');
+      alert.error('Error', 'Silakan pilih cafe terlebih dahulu dari dropdown di navbar');
       return;
     }
 
     try {
+      alert.loading('Sedang menyimpan data...');
+      
       const payload = {
         cafe_id: activeCafeId,
         name: formData.name,
-        stock: parseFloat(formData.stock) || 0,  // ← Konversi di sini
+        stock: parseFloat(formData.stock) || 0,
         unit: formData.unit,
-        cost: parseInt(formData.cost) || 0,  // ← Konversi di sini
+        cost: parseInt(formData.cost) || 0,
       };
 
       if (editingIngredient) {
         await ingredientService.updateIngredient(editingIngredient.id, payload);
+        alert.successAfterLoading('Data Berhasil Diperbarui!');
       } else {
         await ingredientService.createIngredient(payload);
+        alert.successAfterLoading('Data Berhasil Ditambahkan!');
       }
       
       setIsModalOpen(false);
@@ -213,22 +219,25 @@ export default function IngredientsPage() {
         }
       }
       
-      alert(`Error: ${errorMessage}`);
+      alert.error('Gagal Menyimpan Data', errorMessage);
     }
   };
 
 const handleDelete = async (id: string) => {
-  if (
-    confirm(
-      'Apakah Anda yakin ingin menghapus bahan baku ini? Menghapus bahan baku dapat memengaruhi menu jualan yang terikat dengan resep ini.'
-    )
-  ) {
+  const confirmed = await alert.confirmDelete(
+    'Bahan Baku ini',
+    'Menghapus bahan baku dapat memengaruhi menu jualan yang terikat dengan resep ini.'
+  );
+
+  if (confirmed) {
     try {
+      alert.loading('Sedang menghapus data...');
       await ingredientService.deleteIngredient(id);
-      fetchIngredients(); // ← Fetch data terbaru dari server
+      alert.successAfterLoading('Data Berhasil Dihapus!');
+      fetchIngredients();
     } catch (error) {
       console.error('Gagal menghapus data:', error);
-      alert('Gagal menghapus data dari server.');
+      alert.error('Gagal Menghapus Data', 'Gagal menghapus data dari server.');
     }
   }
 };
@@ -238,12 +247,12 @@ const handleDelete = async (id: string) => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-800">Master Bahan Baku</h1>
-          <p className="text-gray-600 mt-1">Daftar stok induk komoditas gudang dapur kafe</p>
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-800">Master Bahan Baku</h1>
+          <p className="text-gray-600 mt-1">Daftar stok induk komoditas gudang</p>
         </div>
         <button
           onClick={handleOpenAddModal}
-          className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4 py-2 rounded-lg transition-colors w-fit"
+          className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold px-3 py-2 sm:px-4 sm:py-2 rounded-lg text-sm sm:text-base"
         >
           <Plus size={20} />
           Tambah Bahan Baku
@@ -251,8 +260,10 @@ const handleDelete = async (id: string) => {
       </div>
 
       {/* Table */}
-      <div className="bg-white rounded-lg shadow-md border border-gray-200 overflow-hidden">
-        <MaterialReactTable table={table} />
+      <div className="bg-white rounded-lg shadow-md border border-gray-200 overflow-x-auto">
+        <div className="min-w-full">
+          <MaterialReactTable table={table} />
+        </div>
       </div>
 
       {/* Modal */}
@@ -260,7 +271,7 @@ const handleDelete = async (id: string) => {
         <DialogTitle sx={{ backgroundColor: '#2563eb', color: 'white' }}>
           {editingIngredient ? 'Ubah Informasi Bahan Baku' : 'Tambah Master Bahan Baku Baru'}
         </DialogTitle>
-        <DialogContent sx={{ pt: 3 }}>
+        <DialogContent sx={{ pt: 2, px: 1.5 }} className="sm:p-4">
           <form onSubmit={handleSubmit} className="space-y-4">
             <TextField
               fullWidth
@@ -274,7 +285,7 @@ const handleDelete = async (id: string) => {
               margin="normal"
             />
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <TextField
                 fullWidth
                 label="Stok Awal"
