@@ -49,6 +49,16 @@ export default function IngredientsPage() {
   const columns = useMemo<MRT_ColumnDef<Ingredient>[]>(
     () => [
       {
+        id: 'no',
+        header: 'No',
+        size: 60,
+        enableSorting: false,
+        Cell: ({ row, table }) => {
+          const { pageIndex, pageSize } = table.getState().pagination || { pageIndex: 0, pageSize: 10 };
+          return pageIndex * pageSize + row.index + 1;
+        },
+      },
+      {
         accessorKey: 'name',
         header: 'Nama Bahan',
         size: window.innerWidth < 768 ? 120 : 200,
@@ -165,9 +175,9 @@ export default function IngredientsPage() {
     setEditingIngredient(ingredient);
     setFormData({
       name: ingredient.name,
-      stock: ingredient.stock.toString(),  // ← Ubah ke string
+      stock: ingredient.stock.toString(), 
       unit: ingredient.unit,
-      cost: ingredient.cost?.toString() || '',  // ← Ubah ke string
+      cost: ingredient.cost?.toString() || '',  
     });
     setIsModalOpen(true);
   };
