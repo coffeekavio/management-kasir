@@ -44,16 +44,16 @@ export default function LoginPage() {
   return (
     <div className="relative min-h-screen">
       <Image src={bg} alt="background" fill className="object-cover" priority />
-      <div className="absolute inset-0 bg-gradient-to-br from-[#1976D2]/60 to-[#42A5F5]/60" />
+      <div className="absolute inset-0 bg-gradient-to-br from-[#0D47A1]/80 to-[#1565C0]/90" />
 
       {/* Logo fixed left */}
-      <div className="absolute left-4 top-4 z-20 flex items-center gap-3">
-        <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center shadow-lg">
-          <Image src={logo} alt="logo" className="w-8 h-8 object-contain" />
+      <div className="absolute left-8 md:left-4 top-4 z-20 flex items-center gap-3">
+        <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center shadow-lg border border-white/20 overflow-hidden">
+          <Image src={logo} alt="logo" className="w-9 h-9 object-contain" />
         </div>
-        <div className="hidden sm:block">
-          <h2 className="text-lg font-semibold text-white">POS</h2>
-          <p className="text-blue-100 text-sm">Sistem Manajemen Penjualan</p>
+        <div className="flex flex-col">
+          <h2 className="text-white text-base font-bold leading-tight">Velo POS</h2>
+          <p className="text-blue-100 text-sm">Sistem manajemen penjualan</p>
         </div>
       </div>
 
