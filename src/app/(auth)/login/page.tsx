@@ -44,7 +44,7 @@ export default function LoginPage() {
   return (
     <div className="relative min-h-screen">
       <Image src={bg} alt="background" fill className="object-cover" priority />
-      <div className="absolute inset-0 bg-gradient-to-br from-[#1976D2] to-[#42A5F5" />
+      <div className="absolute inset-0 bg-gradient-to-br from-[#1976D2] to-[#42A5F5]" />
 
       {/* Logo fixed left */}
       <div className="absolute left-4 top-4 z-20 flex items-center gap-3">
