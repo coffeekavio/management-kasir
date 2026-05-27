@@ -5,6 +5,8 @@ import { usePathname } from 'next/navigation';
 import { Home, BarChart3, ShoppingCart, Users, Package, LogOut, Menu, X, Coffee, Gift } from 'lucide-react';
 import { useState } from 'react';
 import { useAuthStore } from '@/lib/store';
+import Image from 'next/image';
+import logo_white from '../app/assets/logo-white.png';
 
 export const Sidebar = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -30,23 +32,26 @@ export const Sidebar = () => {
       {/* Mobile menu button */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="fixed top-4 left-4 z-50 md:hidden p-2 bg-gray-800 text-white rounded-lg"
+        className="fixed top-4 left-4 z-50 md:hidden p-2 bg-[#1976D2] text-white rounded-lg shadow-md"
+        aria-label="Toggle menu"
       >
         {isOpen ? <X size={24} /> : <Menu size={24} />}
       </button>
 
       {/* Sidebar */}
       <aside
-        className={`fixed left-0 top-0 h-screen w-64 bg-gray-900 text-white p-6 transition-transform duration-300 ease-in-out ${
+        className={`fixed left-0 top-0 h-screen w-64 bg-gradient-to-b from-[#0D47A1] to-[#1565C0] text-white p-6 transition-transform duration-300 ease-in-out ${
           isOpen ? 'translate-x-0' : '-translate-x-full'
-        } md:translate-x-0 md:relative z-40`}
+        } md:translate-x-0 md:relative z-40 shadow-lg flex flex-col`}
       >
-        <div className="mb-8">
-          <h1 className="text-2xl font-bold text-blue-400">Manager Kasir</h1>
-          <p className="text-sm text-gray-400 mt-1">Sistem Manajemen Penjualan</p>
+        <div className="mb-8 md:mb-14 flex flex-col items-center gap-3">
+          <Image src={logo_white} alt="Velo logo" className="w-28 h-auto object-contain"/>
+          <div>
+            <p className="text-sm text-[#E3F2FD]">Sistem Manajemen Penjualan</p>
+          </div>
         </div>
 
-        <nav className="space-y-2 flex-1">
+        <nav className="space-y-2 flex-1 overflow-y-auto">
           {menuItems.map((item) => {
             const Icon = item.icon;
             const active = isActive(item.href);
@@ -57,24 +62,24 @@ export const Sidebar = () => {
                 onClick={() => setIsOpen(false)}
                 className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
                   active
-                    ? 'bg-blue-600 text-white'
-                    : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                    ? 'bg-[#1976D2] text-white border-l-4 border-[#1E88E5]'
+                    : 'text-[#E3F2FD] hover:bg-[#42A5F5]/10 hover:text-white'
                 }`}
               >
                 <Icon size={20} />
-                <span>{item.label}</span>
+                <span className="truncate">{item.label}</span>
               </Link>
             );
           })}
         </nav>
 
-        <div className="border-t border-gray-700 pt-4">
+        <div className="mt-auto pt-4">
           <button
             onClick={() => {
               logout();
               window.location.href = '/login';
             }}
-            className="flex items-center gap-3 px-4 py-3 rounded-lg text-gray-300 hover:bg-red-600 hover:text-white transition-colors w-full"
+            className="flex items-center gap-3 px-4 py-3 rounded-lg text-[#E3F2FD] hover:bg-[#42A5F5]/10 hover:text-white transition-colors w-full"
           >
             <LogOut size={20} />
             <span>Logout</span>
