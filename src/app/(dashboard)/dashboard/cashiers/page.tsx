@@ -167,9 +167,9 @@ export default function CashiersPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-800">Manajemen Karyawan</h1>
           <p className="text-gray-600">Kelola data kasir, supervisor, dan staf toko Anda</p>
-          <p className="text-sm text-blue-600 font-medium mt-2">
+          {/* <p className="text-sm text-blue-600 font-medium mt-2">
             📍 Cabang: <span className="font-semibold">{activeCafe?.name || 'Memilih cabang...'}</span>
-          </p>
+          </p> */}
         </div>
         {/* Validasi Akses: Hanya manager yang boleh menambah/mengelola staf */}
         {currentUser?.role === 'manager' && (

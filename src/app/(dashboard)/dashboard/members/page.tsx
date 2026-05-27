@@ -1,15 +1,27 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useAuthStore } from '@/lib/store';
 import { memberService, Member } from '@/services/memberService';
-import { Plus, Edit2, Trash2, X, Save, Search, Gift, Settings } from 'lucide-react';
+import { Plus, Edit2, Trash2, X, Save, Settings } from 'lucide-react';
 import { useCrudAlert } from '@/hooks/useAlert';
 import { memberSettingsService, MemberSettings } from '@/services/memberSettingsService';
+import {
+  MaterialReactTable,
+  useMaterialReactTable,
+  type MRT_ColumnDef,
+} from 'material-react-table';
+import {
+  modalConfirm,
+  modalDeleteConfirm,
+  modalLoading,
+  modalSuccess,
+  modalError as showModalError,
+} from '@/components/Modals';
 
 export default function MembersPage() {
   const [members, setMembers] = useState<Member[]>([]);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [membersLoading, setMembersLoading] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingMember, setEditingMember] = useState<Member | null>(null);
   const [loading, setLoading] = useState(false);
@@ -42,10 +54,13 @@ export default function MembersPage() {
         return;
       }
 
+      setMembersLoading(true);
       const data = await memberService.getMembers(activeCafeId);
       setMembers(data);
     } catch (error: unknown) {
       console.error('Gagal mengambil data member:', error);
+    } finally {
+      setMembersLoading(false);
     }
   }, [activeCafeId]);
 
@@ -106,6 +121,20 @@ export default function MembersPage() {
       return;
     }
 
+    const saveConfirmed = await modalConfirm(
+      editingMember ? 'Simpan perubahan member?' : 'Tambah member baru?',
+      editingMember
+        ? 'Perubahan data member akan disimpan ke server.'
+        : 'Data member baru akan ditambahkan ke server.',
+      'Ya, Simpan',
+      'Batal',
+      'question'
+    );
+
+    if (!saveConfirmed) {
+      return;
+    }
+
     try {
       if (!activeCafeId) {
         alert.error('Error', 'ID Kafe tidak ditemukan. Silakan login ulang.');
@@ -149,20 +178,18 @@ export default function MembersPage() {
 
   // Hapus member
   const handleDeleteMember = async (id: string, name: string) => {
-    const confirmed = await alert.confirmDelete(
-      name,
-      'Member akan dihapus dari sistem'
-    );
+    const confirmed = await modalDeleteConfirm(name, 'Member akan dihapus dari sistem');
 
     if (confirmed) {
       try {
-        alert.loading('Menghapus member...');
+        modalLoading('Menghapus member...');
         await memberService.deleteMember(id);
-        setMembers(members.filter((m) => m.id !== id));
-        alert.successAfterLoading('Member Berhasil Dihapus!');
+        setMembers((prev) => prev.filter((m) => m.id !== id));
+        modalSuccess('Berhasil', 'Member berhasil dihapus!');
       } catch (err: unknown) {
         console.error('Gagal menghapus member:', err);
-        alert.error('Gagal Menghapus', 'Gagal menghapus member dari server');
+        const errorMessage = err instanceof Error ? err.message : 'Gagal menghapus member dari server';
+        showModalError('Gagal Menghapus', errorMessage);
       }
     }
   };
@@ -199,6 +226,18 @@ export default function MembersPage() {
       return;
     }
 
+    const settingsConfirmed = await modalConfirm(
+      'Simpan pengaturan poin?',
+      'Perubahan aturan poin member akan diterapkan untuk cafe ini.',
+      'Ya, Simpan',
+      'Batal',
+      'question'
+    );
+
+    if (!settingsConfirmed) {
+      return;
+    }
+
     try {
       alert.loading('Menyimpan pengaturan...');
       setSettingsLoading(true);
@@ -226,11 +265,132 @@ export default function MembersPage() {
     }
   };
 
-  // Filter members berdasarkan search
-  const filteredMembers = members.filter((member) =>
-    member.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    member.phone?.toLowerCase().includes(searchQuery.toLowerCase())
+  const columns = useMemo<MRT_ColumnDef<Member>[]>(
+    () => [
+      {
+        id: 'no',
+        header: 'No',
+        size: 60,
+        enableSorting: false,
+        Cell: ({ row, table }) => {
+          const { pageIndex, pageSize } = table.getState().pagination || {
+            pageIndex: 0,
+            pageSize: 10,
+          };
+          return pageIndex * pageSize + row.index + 1;
+        },
+      },
+      {
+        accessorKey: 'name',
+        header: 'Nama Member',
+      },
+      {
+        accessorKey: 'phone',
+        header: 'Nomor Telepon',
+        Cell: ({ cell }) => cell.getValue<string>() || '-',
+      },
+      {
+        accessorKey: 'points',
+        header: 'Poin Reward',
+        Cell: ({ cell }) => (
+          <span className="text-sm font-bold text-blue-600 bg-blue-50 px-3 py-1 rounded-full">
+            {cell.getValue<number>()} poin
+          </span>
+        ),
+      },
+      {
+        accessorKey: 'created_at',
+        header: 'Bergabung',
+        Cell: ({ cell }) => {
+          const value = cell.getValue<string>();
+          return value
+            ? new Date(value).toLocaleDateString('id-ID', {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric',
+              })
+            : '-';
+        },
+      },
+      {
+        id: 'actions',
+        header: 'Aksi',
+        enableSorting: false,
+        Cell: ({ row }) => (
+          <div className="flex items-center justify-end gap-2">
+            <button
+              onClick={() => handleOpenEditMember(row.original)}
+              className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700 px-2 py-1 rounded hover:bg-blue-50"
+            >
+              <Edit2 size={13} />
+              Edit
+            </button>
+            <button
+              onClick={() => handleDeleteMember(row.original.id, row.original.name)}
+              className="inline-flex items-center gap-1 text-xs font-semibold text-red-600 hover:text-red-700 px-2 py-1 rounded hover:bg-red-50"
+            >
+              <Trash2 size={13} />
+              Hapus
+            </button>
+          </div>
+        ),
+      },
+    ],
+    []
   );
+
+  const table = useMaterialReactTable({
+    columns,
+    data: members,
+    state: {
+      isLoading: membersLoading,
+    },
+    enableColumnFilterModes: true,
+    enableGlobalFilter: true,
+    enablePagination: true,
+    enableSorting: true,
+    initialState: {
+      pagination: {
+        pageIndex: 0,
+        pageSize: 10,
+      },
+    },
+    muiTableProps: {
+      sx: {
+        borderCollapse: 'collapse',
+      },
+    },
+    muiTableHeadCellProps: {
+      sx: {
+        backgroundColor: '#f9fafb',
+        borderBottom: '1px solid #e5e7eb',
+        padding: '12px 16px',
+        fontWeight: 600,
+        fontSize: '0.875rem',
+        color: '#374151',
+      },
+    },
+    muiTableBodyCellProps: {
+      sx: {
+        padding: '12px 16px',
+        fontSize: '0.875rem',
+      },
+    },
+    muiTableBodyRowProps: {
+      sx: {
+        '&:hover': {
+          backgroundColor: '#f0f4f8',
+        },
+        borderBottom: '1px solid #f3f4f6',
+      },
+    },
+    muiSearchTextFieldProps: {
+      placeholder: 'Cari nama atau nomor telepon member...',
+      variant: 'outlined',
+      size: 'small',
+      fullWidth: false,
+    },
+  });
 
   return (
     <div className="space-y-6">
@@ -328,96 +488,10 @@ export default function MembersPage() {
         </div>
       )}
 
-      {/* Search Bar */}
-      <div className="bg-white rounded-lg shadow-sm p-4 border border-gray-100">
-        <div className="relative">
-          <Search className="absolute left-3 top-2.5 text-gray-400" size={18} />
-          <input
-            type="text"
-            placeholder="Cari nama atau nomor telepon member..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-gray-700 text-sm"
-          />
-        </div>
-      </div>
-
       {/* Table Members */}
       <div className="bg-white rounded-lg shadow-md border border-gray-100 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-gray-50 border-b border-gray-200">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600">Nama Member</th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600">Nomor Telepon</th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600">Poin Reward</th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600">Bergabung</th>
-                <th className="px-6 py-3 text-right text-xs font-semibold text-gray-600">Aksi</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredMembers.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="px-6 py-8 text-center text-gray-500 text-sm">
-                    Belum ada member terdaftar
-                  </td>
-                </tr>
-              ) : (
-                filteredMembers.map((member) => (
-                  <tr key={member.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
-                    <td className="px-6 py-4 text-sm font-medium text-gray-800">{member.name}</td>
-                    <td className="px-6 py-4 text-sm text-gray-600">{member.phone || '-'}</td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-bold text-blue-600 bg-blue-50 px-3 py-1 rounded-full">
-                          {member.points} poin
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-500">
-                      {member.created_at
-                        ? new Date(member.created_at).toLocaleDateString('id-ID', {
-                            year: 'numeric',
-                            month: 'short',
-                            day: 'numeric',
-                          })
-                        : '-'}
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center justify-end gap-2">
-                        {/* Add Points Button */}
-                        <button
-                          onClick={() => handleAdjustPoints(member.id, 1)}
-                          className="inline-flex items-center gap-1 text-xs font-semibold text-green-600 hover:text-green-700 px-2 py-1 rounded hover:bg-green-50"
-                          title="Tambah 1 poin"
-                        >
-                          <Gift size={13} />
-                        </button>
-
-                        {/* Edit Button */}
-                        <button
-                          onClick={() => handleOpenEditMember(member)}
-                          className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700 px-2 py-1 rounded hover:bg-blue-50"
-                        >
-                          <Edit2 size={13} />
-                          Edit
-                        </button>
-
-                        {/* Delete Button */}
-                        <button
-                          onClick={() => handleDeleteMember(member.id, member.name)}
-                          className="inline-flex items-center gap-1 text-xs font-semibold text-red-600 hover:text-red-700 px-2 py-1 rounded hover:bg-red-50"
-                        >
-                          <Trash2 size={13} />
-                          Hapus
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+        <div className="min-w-full">
+          <MaterialReactTable table={table} />
         </div>
       </div>
 
