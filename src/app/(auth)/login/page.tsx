@@ -44,7 +44,7 @@ export default function LoginPage() {
   return (
     <div className="relative min-h-screen">
       <Image src={bg} alt="background" fill className="object-cover" priority />
-      <div className="absolute inset-0 bg-gradient-to-br from-[#42A5F5] to-[#90CAF9" />
+      <div className="absolute inset-0 bg-gradient-to-br from-[#1976D2] to-[#42A5F5" />
 
       {/* Logo fixed left */}
       <div className="absolute left-4 top-4 z-20 flex items-center gap-3">
@@ -58,7 +58,7 @@ export default function LoginPage() {
       </div>
 
       <div className="relative z-10 flex items-center justify-center p-4 min-h-screen">
-        <div className="w-full max-w-md">
+        <div className="w-full max-w-xs">
           {/* Login Card */}
           <div className="bg-white rounded-2xl shadow-2xl p-8">
             <h2 className="text-2xl font-bold text-gray-800 mb-6">Login</h2>
