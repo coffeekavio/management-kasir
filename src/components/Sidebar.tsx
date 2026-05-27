@@ -73,7 +73,7 @@ export const Sidebar = () => {
           })}
         </nav>
 
-        <div className="mt-auto pt-4">
+        <div className="pt-4 md:mt-auto">
           <button
             onClick={() => {
               logout();

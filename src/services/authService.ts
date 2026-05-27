@@ -75,6 +75,7 @@ export const authService = {
 
   logout: (): void => {
     localStorage.removeItem('token');
+    localStorage.removeItem('auth-storage'); // Hapus persistent store
     useAuthStore.getState().logout();
   },
 
