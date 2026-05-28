@@ -55,7 +55,6 @@ export default function StockOpnamePage() {
   const [isCreating, setIsCreating] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
-  const [expandedDetail, setExpandedDetail] = useState<string | null>(null);
   const [ingredientsMap, setIngredientsMap] = useState<Record<string, string>>({});
 
   // Get activeCafeId dari Zustand store
@@ -201,6 +200,26 @@ export default function StockOpnamePage() {
   }, [activeCafeId]);
 
   // Table columns for Draft Opname (StockOpname)
+  const handleRemoveDraft = useCallback((id: string) => {
+    setStockOpnameList((prev) => prev.filter((item) => item.id !== id));
+  }, []);
+
+  const handleRemoveHistory = useCallback(async (id: string) => {
+    const confirmed = await modalDeleteConfirm('Riwayat Opname', 'Hapus riwayat ini dari database?');
+    if (!confirmed) return;
+
+    try {
+      const response = await api.delete(`/api/stock-opname/${id}`);
+      if (response.data.status === 'success') {
+        setCompletedOpnames((prev) => prev.filter((item) => item.id !== id));
+        modalSuccess('Terhapus', 'Riwayat stok opname dihapus');
+      }
+    } catch (error) {
+      console.error('Gagal menghapus stok opname:', error);
+      showModalError('Gagal', 'Gagal menghapus stok opname dari database');
+    }
+  }, []);
+
   const draftColumns = useMemo<MRT_ColumnDef<StockOpname>[]>(
     () => [
       {
@@ -224,12 +243,6 @@ export default function StockOpnamePage() {
         enableSorting: false,
         Cell: ({ row }) => (
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => setExpandedDetail(expandedDetail === row.original.id ? null : row.original.id)}
-              className="px-3 py-1 border rounded text-sm"
-            >
-              Detail
-            </button>
             <button
               onClick={async () => {
                 const so = row.original;
@@ -269,7 +282,7 @@ export default function StockOpnamePage() {
         ),
       },
     ],
-    [expandedDetail]
+    []
   );
 
   // Table columns for Completed Opname
@@ -297,24 +310,7 @@ export default function StockOpnamePage() {
         Cell: ({ row }) => (
           <div className="flex items-center gap-2">
             <button
-              onClick={() => setExpandedDetail(expandedDetail === row.original.id ? null : row.original.id)}
-              className="px-3 py-1 border rounded text-sm"
-            >
-              {expandedDetail === row.original.id ? 'Sembunyikan' : 'Lihat'}
-            </button>
-            <button
-              onClick={async () => {
-                const confirmed = await modalDeleteConfirm('Riwayat Opname', 'Hapus riwayat ini dari database?');
-                if (!confirmed) return;
-                try {
-                  await api.delete(`/api/stock-opname/${row.original.id}`);
-                  setCompletedOpnames((prev) => prev.filter((p) => p.id !== row.original.id));
-                  modalSuccess('Terhapus', 'Riwayat stok opname dihapus');
-                } catch (err) {
-                  console.error('Gagal hapus riwayat', err);
-                  showModalError('Gagal', 'Gagal menghapus riwayat stok opname');
-                }
-              }}
+              onClick={() => handleRemoveHistory(row.original.id)}
               className="px-3 py-1 bg-red-600 text-white rounded text-sm"
             >
               Hapus
@@ -323,7 +319,7 @@ export default function StockOpnamePage() {
         ),
       },
     ],
-    [expandedDetail]
+    [handleRemoveHistory]
   );
 
   const draftTable = useMaterialReactTable({
@@ -455,24 +451,6 @@ export default function StockOpnamePage() {
     }
   };
 
-  const handleClearCompleted = async (id: string) => {
-    const confirmed = await modalDeleteConfirm('Riwayat Opname', 'Hapus riwayat ini dari database?');
-    if (!confirmed) return;
-
-    try {
-      const response = await api.delete(`/api/stock-opname/${id}`);
-      if (response.data.status === 'success') {
-        // Remove dari UI
-        const updated = completedOpnames.filter((item) => item.id !== id);
-        setCompletedOpnames(updated);
-        modalSuccess('Terhapus', 'Riwayat stok opname dihapus');
-      }
-    } catch (error) {
-      console.error('Gagal menghapus stok opname:', error);
-      showModalError('Gagal', 'Gagal menghapus stok opname dari database');
-    }
-  };
-
   // Fungsi untuk refresh/reload riwayat dari database
   const handleRefreshHistory = async () => {
     if (!activeCafeId) return;
@@ -590,108 +568,6 @@ export default function StockOpnamePage() {
           <div className="bg-white rounded-lg shadow-md overflow-hidden border border-blue-200 p-4">
             <MaterialReactTable table={draftTable} />
           </div>
-
-          {/* Expanded detail for selected draft */}
-          {expandedDetail && stockOpnameList.find((s) => s.id === expandedDetail) && (
-            (() => {
-              const so = stockOpnameList.find((s) => s.id === expandedDetail)!;
-              return (
-                <div key={so.id} className="bg-white rounded-lg shadow-md overflow-hidden border border-blue-200">
-                  <div className="bg-gradient-to-r from-blue-500 to-blue-600 text-white p-5">
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1">
-                        <h3 className="text-lg font-bold">{so.id}</h3>
-                        <p className="text-blue-100 text-sm">Tanggal: {formatDate(so.date)}</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-sm text-blue-100">Nilai Aset</p>
-                        <p className="text-2xl font-bold">{formatCurrency(so.totalValue)}</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
-                      <thead className="bg-gray-50 border-b border-gray-200">
-                        <tr>
-                          <th className="px-6 py-3 text-left font-semibold text-gray-700">Bahan Baku</th>
-                          <th className="px-6 py-3 text-center font-semibold text-gray-700">Satuan</th>
-                          <th className="px-6 py-3 text-center font-semibold text-gray-700">Sistem</th>
-                          <th className="px-6 py-3 text-center font-semibold text-gray-700">Fisik</th>
-                          <th className="px-6 py-3 text-center font-semibold text-gray-700">Selisih</th>
-                          <th className="px-6 py-3 text-center font-semibold text-gray-700">Status</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {so.products.map((item, idx) => (
-                          <tr key={item.ingredientId} className={`border-b ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
-                            <td className="px-6 py-4">
-                              <p className="font-semibold text-gray-800">{item.ingredientName}</p>
-                            </td>
-                            <td className="px-6 py-4 text-center">
-                              <span className="bg-gray-200 text-gray-700 px-2 py-1 rounded text-xs font-bold">{item.unit}</span>
-                            </td>
-                            <td className="px-6 py-4 text-center text-gray-800 font-semibold">{item.systemStock}</td>
-                            <td className="px-6 py-4 text-center">
-                              <input
-                                type="number"
-                                step="0.01"
-                                value={item.physicalStock}
-                                onChange={(e) => handleUpdatePhysicalStock(so.id, item.ingredientId, parseFloat(e.target.value) || 0)}
-                                className="w-24 px-2 py-1 border border-gray-300 rounded text-center focus:ring-2 focus:ring-blue-500 outline-none text-black"
-                              />
-                            </td>
-                            <td className="px-6 py-4 text-center">
-                              <p className={`font-semibold ${item.difference === 0 ? 'text-gray-800' : item.difference > 0 ? 'text-green-600' : 'text-red-600'}`}>{item.difference > 0 ? '+' : ''}{item.difference}</p>
-                            </td>
-                            <td className="px-6 py-4 text-center">
-                              {item.difference === 0 ? (
-                                <span className="inline-flex items-center gap-1 px-3 py-1 bg-green-100 text-green-800 rounded-full text-xs font-semibold"><Check size={14} /> Cocok</span>
-                              ) : (
-                                <span className="inline-flex items-center gap-1 px-3 py-1 bg-yellow-100 text-yellow-800 rounded-full text-xs font-semibold"><AlertTriangle size={14} /> Selisih</span>
-                              )}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  <div className="bg-gray-50 border-t border-gray-200 p-5 space-y-4">
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">Catatan Audit</label>
-                      <textarea
-                        value={so.notes}
-                        onChange={(e) => setStockOpnameList((prev) => prev.map(item => item.id === so.id ? { ...item, notes: e.target.value } : item))}
-                        placeholder="Misal: Biji kopi tumpah 100 gram saat shift pagi..."
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg outline-none resize-none text-gray-700"
-                        rows={2}
-                      />
-                    </div>
-                    <div className="flex justify-end gap-2">
-                      <button
-                        onClick={async () => {
-                          const confirmed = await modalConfirm('Simpan Stok Opname', 'Yakin ingin menyimpan stok opname ini ke database?', 'Ya, Simpan', 'Batal', 'question');
-                          if (!confirmed) return;
-                          modalLoading('Menyimpan stok opname...');
-                          try {
-                            await handleSaveToDatabase(so);
-                            modalSuccess('Berhasil', 'Stok opname disimpan');
-                          } catch (err) {
-                            console.error(err);
-                            showModalError('Gagal', 'Gagal menyimpan stok opname');
-                          }
-                        }}
-                        className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-2 rounded-lg transition-colors"
-                      >
-                        <Save size={18} /> Simpan ke Database
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              );
-            })()
-          )}
         </div>
       )}
 
@@ -733,58 +609,6 @@ export default function StockOpnamePage() {
           <div className="bg-white rounded-lg shadow-sm border border-green-200 overflow-hidden p-4">
             <MaterialReactTable table={historyTable} />
           </div>
-
-          {/* Expanded detail for selected history */}
-          {expandedDetail && completedOpnames.find((s) => s.id === expandedDetail) && (
-            (() => {
-              const co = completedOpnames.find((s) => s.id === expandedDetail)!;
-              return (
-                <div key={co.id} className="bg-white rounded-lg shadow-sm border border-green-200 overflow-hidden hover:shadow-md transition-shadow">
-                  <div className="bg-gradient-to-r from-green-500 to-green-600 text-white p-4">
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1">
-                        <h3 className="text-lg font-bold">{co.id}</h3>
-                        <p className="text-green-100 text-sm">Tanggal Opname: {formatDate(co.date)}{co.completedAt && ` • Disimpan: ${formatDate(new Date(co.completedAt))}`}</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-sm text-green-100">Nilai Aset</p>
-                        <p className="text-2xl font-bold">{formatCurrency(co.totalValue)}</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="p-4">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b border-gray-200">
-                          <th className="text-left font-semibold text-gray-700 pb-2">Bahan</th>
-                          <th className="text-center font-semibold text-gray-700 pb-2">Sistem</th>
-                          <th className="text-center font-semibold text-gray-700 pb-2">Fisik</th>
-                          <th className="text-center font-semibold text-gray-700 pb-2">Selisih</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {co.products && co.products.length > 0 ? (
-                          co.products.map((item) => (
-                            <tr key={item.ingredientId} className="border-b border-gray-200">
-                              <td className="py-2 text-gray-800 font-semibold">{item.ingredientName || 'Tidak ada nama'}</td>
-                              <td className="text-center text-gray-700">{item.systemStock} {item.unit}</td>
-                              <td className="text-center text-gray-700">{item.physicalStock} {item.unit}</td>
-                              <td className={`text-center font-semibold ${item.difference === 0 ? 'text-gray-700' : item.difference > 0 ? 'text-green-600' : 'text-red-600'}`}>{item.difference > 0 ? '+' : ''}{item.difference}</td>
-                            </tr>
-                          ))
-                        ) : (
-                          <tr>
-                            <td colSpan={4} className="py-4 text-center text-gray-500 text-sm">Tidak ada data item tersedia</td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              );
-            })()
-          )}
         </div>
       )}
     </div>

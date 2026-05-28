@@ -112,3 +112,35 @@ export interface StockOpnameItem {
   difference: number;
   cost: number;
 }
+
+// Voucher types
+export interface Voucher {
+  id: string;
+  cafe_id: string;
+  name: string;
+  discount_percentage: number;
+  min_purchase: number;
+  start_date: string | Date;
+  end_date: string | Date;
+  is_active: boolean;
+  created_at?: string;
+}
+
+export interface VoucherCreatePayload {
+  cafe_id: string;
+  name: string;
+  discount_percentage: number;
+  min_purchase: number;
+  start_date: string;
+  end_date: string;
+  is_active: boolean;
+}
+
+export interface VoucherUpdatePayload {
+  name?: string;
+  discount_percentage?: number;
+  min_purchase?: number;
+  start_date?: string;
+  end_date?: string;
+  is_active?: boolean;
+}
