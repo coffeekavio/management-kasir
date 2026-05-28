@@ -1,11 +1,24 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import { Plus, Save, AlertTriangle, Check, RefreshCw, Trash2, Eye } from 'lucide-react';
+import {
+  MaterialReactTable,
+  useMaterialReactTable,
+  type MRT_ColumnDef,
+} from 'material-react-table';
 import { StockOpname, StockOpnameItem, Ingredient, StockOpnameFromDB, StockOpnameItemFromDB } from '@/types';
 import { formatDate, formatCurrency } from '@/lib/utils';
 import { api } from '@/services/api';
 import { useAuthStore } from '@/lib/store'; 
+import {
+  modalConfirm,
+  modalDeleteConfirm,
+  modalLoading,
+  modalSuccess,
+  modalError as showModalError,
+  modalInfo,
+} from '@/components/Modals';
 
 interface CompletedOpname extends StockOpname {
   completedAt?: string;
@@ -135,7 +148,7 @@ export default function StockOpnamePage() {
   // Fungsi untuk menarik data Bahan Baku dari API FastAPI
   const handleCreateStockOpname = useCallback(async () => {
     if (!activeCafeId) {
-      alert('Error: Silakan pilih cafe terlebih dahulu');
+      showModalError('Cafe Belum Dipilih', 'Silakan pilih cafe terlebih dahulu');
       return;
     }
 
@@ -148,7 +161,7 @@ export default function StockOpnamePage() {
       const ingredientsData = response.data.data || [];
 
       if (ingredientsData.length === 0) {
-        alert('Tidak ada bahan baku yang ditemukan. Silakan tambahkan bahan baku terlebih dahulu.');
+        await modalInfo('Tidak ada bahan baku', 'Tidak ada bahan baku yang ditemukan. Silakan tambahkan bahan baku terlebih dahulu.');
         setIsCreating(false);
         setIsLoading(false);
         return;
@@ -175,17 +188,163 @@ export default function StockOpnamePage() {
         notes: '',
       };
 
-      // Tambahkan ke paling atas
-      setStockOpnameList([newStockOpname, ...stockOpnameList]);
+      // Tambahkan ke paling atas (gunakan functional update untuk menghindari stale state)
+      setStockOpnameList((prev) => [newStockOpname, ...prev]);
     } catch (error: unknown) {
       console.error('Gagal mengambil data bahan baku:', error);
       const errorMsg = error instanceof Error && 'response' in error && typeof error.response === 'object' && error.response !== null && 'data' in error.response && typeof error.response.data === 'object' && error.response.data !== null && 'detail' in error.response.data ? (error.response.data as { detail: string }).detail : 'Gagal memuat data bahan baku dari server.';
-      alert(`Error: ${errorMsg}`);
+      showModalError('Gagal Memuat Bahan Baku', errorMsg);
     } finally {
       setIsCreating(false);
       setIsLoading(false);
     }
-  }, [activeCafeId, stockOpnameList]);
+  }, [activeCafeId]);
+
+  // Table columns for Draft Opname (StockOpname)
+  const draftColumns = useMemo<MRT_ColumnDef<StockOpname>[]>(
+    () => [
+      {
+        id: 'id',
+        header: 'ID',
+        accessorKey: 'id',
+      },
+      {
+        accessorKey: 'date',
+        header: 'Tanggal',
+        Cell: ({ cell }) => formatDate(cell.getValue() as Date),
+      },
+      {
+        accessorKey: 'totalValue',
+        header: 'Total Nilai',
+        Cell: ({ cell }) => formatCurrency(cell.getValue() as number),
+      },
+      {
+        id: 'actions',
+        header: 'Aksi',
+        enableSorting: false,
+        Cell: ({ row }) => (
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setExpandedDetail(expandedDetail === row.original.id ? null : row.original.id)}
+              className="px-3 py-1 border rounded text-sm"
+            >
+              Detail
+            </button>
+            <button
+              onClick={async () => {
+                const so = row.original;
+                const confirmed = await modalConfirm(
+                  'Simpan Stok Opname',
+                  'Yakin ingin menyimpan stok opname ini ke database?',
+                  'Ya, Simpan',
+                  'Batal',
+                  'question'
+                );
+                if (!confirmed) return;
+                modalLoading('Menyimpan stok opname...');
+                try {
+                  await handleSaveToDatabase(so);
+                  modalSuccess('Berhasil', 'Stok opname disimpan');
+                } catch (err) {
+                  console.error(err);
+                  showModalError('Gagal', 'Gagal menyimpan stok opname');
+                }
+              }}
+              className="px-3 py-1 bg-blue-600 text-white rounded text-sm"
+            >
+              Simpan
+            </button>
+            <button
+              onClick={async () => {
+                const so = row.original;
+                const confirmed = await modalDeleteConfirm('Draft Opname', 'Aksi menghapus draft ini tidak dapat dikembalikan.');
+                if (!confirmed) return;
+                setStockOpnameList((prev) => prev.filter((s) => s.id !== so.id));
+              }}
+              className="px-3 py-1 bg-red-600 text-white rounded text-sm"
+            >
+              Hapus
+            </button>
+          </div>
+        ),
+      },
+    ],
+    [expandedDetail]
+  );
+
+  // Table columns for Completed Opname
+  const historyColumns = useMemo<MRT_ColumnDef<CompletedOpname>[]>(
+    () => [
+      {
+        id: 'id',
+        header: 'ID',
+        accessorKey: 'id',
+      },
+      {
+        accessorKey: 'date',
+        header: 'Tanggal',
+        Cell: ({ cell }) => formatDate(cell.getValue() as Date),
+      },
+      {
+        accessorKey: 'totalValue',
+        header: 'Total Nilai',
+        Cell: ({ cell }) => formatCurrency(cell.getValue() as number),
+      },
+      {
+        id: 'actions',
+        header: 'Aksi',
+        enableSorting: false,
+        Cell: ({ row }) => (
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setExpandedDetail(expandedDetail === row.original.id ? null : row.original.id)}
+              className="px-3 py-1 border rounded text-sm"
+            >
+              {expandedDetail === row.original.id ? 'Sembunyikan' : 'Lihat'}
+            </button>
+            <button
+              onClick={async () => {
+                const confirmed = await modalDeleteConfirm('Riwayat Opname', 'Hapus riwayat ini dari database?');
+                if (!confirmed) return;
+                try {
+                  await api.delete(`/api/stock-opname/${row.original.id}`);
+                  setCompletedOpnames((prev) => prev.filter((p) => p.id !== row.original.id));
+                  modalSuccess('Terhapus', 'Riwayat stok opname dihapus');
+                } catch (err) {
+                  console.error('Gagal hapus riwayat', err);
+                  showModalError('Gagal', 'Gagal menghapus riwayat stok opname');
+                }
+              }}
+              className="px-3 py-1 bg-red-600 text-white rounded text-sm"
+            >
+              Hapus
+            </button>
+          </div>
+        ),
+      },
+    ],
+    [expandedDetail]
+  );
+
+  const draftTable = useMaterialReactTable({
+    columns: draftColumns,
+    data: stockOpnameList,
+    enableColumnFilters: false,
+    enableSorting: true,
+    enableGlobalFilter: true,
+    initialState: { pagination: { pageIndex: 0, pageSize: 5 } },
+    muiSearchTextFieldProps: { placeholder: 'Cari draft opname...' },
+  });
+
+  const historyTable = useMaterialReactTable({
+    columns: historyColumns,
+    data: completedOpnames,
+    enableColumnFilters: false,
+    enableSorting: true,
+    enableGlobalFilter: true,
+    initialState: { pagination: { pageIndex: 0, pageSize: 5 } },
+    muiSearchTextFieldProps: { placeholder: 'Cari riwayat opname...' },
+  });
 
   // Fungsi saat Manager mengetik angka stok fisik (Bisa Desimal)
   const handleUpdatePhysicalStock = (
@@ -223,7 +382,7 @@ export default function StockOpnamePage() {
   // Fungsi untuk menyimpan perubahan ke Database via FastAPI
   const handleSaveToDatabase = async (so: StockOpname) => {
     if (!activeCafeId) {
-      alert('Error: Silakan pilih cafe terlebih dahulu');
+      showModalError('Cafe Belum Dipilih', 'Silakan pilih cafe terlebih dahulu');
       return;
     }
 
@@ -244,7 +403,7 @@ export default function StockOpnamePage() {
       const response = await api.post('/api/stock-opname/save', payload);
 
       if (response.data.status === 'success') {
-        alert(`✓ Stok Opname berhasil disimpan!\n${response.data.message}`);
+        await modalSuccess('✓ Stok Opname berhasil disimpan!', response.data.message || '');
         
         // Hapus SO dari list draft
         setStockOpnameList(stockOpnameList.filter((item) => item.id !== so.id));
@@ -292,23 +451,25 @@ export default function StockOpnamePage() {
     } catch (error: unknown) {
       console.error('Gagal menyimpan stok opname:', error);
       const errorMsg = error instanceof Error && 'response' in error && typeof error.response === 'object' && error.response !== null && 'data' in error.response && typeof error.response.data === 'object' && error.response.data !== null && 'detail' in error.response.data ? (error.response.data as { detail: string }).detail : 'Gagal menyimpan stok opname ke database.';
-      alert(`Error: ${errorMsg}`);
+      showModalError('Gagal Menyimpan', errorMsg);
     }
   };
 
   const handleClearCompleted = async (id: string) => {
-    if (confirm('Hapus dari riwayat?')) {
-      try {
-        const response = await api.delete(`/api/stock-opname/${id}`);
-        if (response.data.status === 'success') {
-          // Remove dari UI
-          const updated = completedOpnames.filter((item) => item.id !== id);
-          setCompletedOpnames(updated);
-        }
-      } catch (error) {
-        console.error('Gagal menghapus stok opname:', error);
-        alert('Gagal menghapus stok opname dari database');
+    const confirmed = await modalDeleteConfirm('Riwayat Opname', 'Hapus riwayat ini dari database?');
+    if (!confirmed) return;
+
+    try {
+      const response = await api.delete(`/api/stock-opname/${id}`);
+      if (response.data.status === 'success') {
+        // Remove dari UI
+        const updated = completedOpnames.filter((item) => item.id !== id);
+        setCompletedOpnames(updated);
+        modalSuccess('Terhapus', 'Riwayat stok opname dihapus');
       }
+    } catch (error) {
+      console.error('Gagal menghapus stok opname:', error);
+      showModalError('Gagal', 'Gagal menghapus stok opname dari database');
     }
   };
 
@@ -354,7 +515,7 @@ export default function StockOpnamePage() {
       }
     } catch (error) {
       console.error('Gagal refresh history dari API:', error);
-      alert('Gagal memuat riwayat stok opname');
+      showModalError('Gagal Memuat Riwayat', 'Gagal memuat riwayat stok opname');
     } finally {
       setIsLoadingHistory(false);
     }
@@ -418,116 +579,123 @@ export default function StockOpnamePage() {
         </div>
       </div>
 
-      {/* Draft Opnames Section */}
+      {/* Draft Opnames Section (Material React Table) */}
       {stockOpnameList.length > 0 && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-xl font-bold text-gray-800">📝 Draft Opname (Belum Disimpan)</h2>
-            <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-sm font-semibold">
-              {stockOpnameList.length} draft
-            </span>
+            <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-sm font-semibold">{stockOpnameList.length} draft</span>
           </div>
 
-          {stockOpnameList.map((so) => (
-            <div key={so.id} className="bg-white rounded-lg shadow-md overflow-hidden border border-blue-200">
-              <div className="bg-gradient-to-r from-blue-500 to-blue-600 text-white p-5">
-                <div className="flex items-center justify-between">
-                  <div className="flex-1">
-                    <h3 className="text-lg font-bold">{so.id}</h3>
-                    <p className="text-blue-100 text-sm">Tanggal: {formatDate(so.date)}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-sm text-blue-100">Nilai Aset</p>
-                    <p className="text-2xl font-bold">{formatCurrency(so.totalValue)}</p>
-                  </div>
-                </div>
-              </div>
+          <div className="bg-white rounded-lg shadow-md overflow-hidden border border-blue-200 p-4">
+            <MaterialReactTable table={draftTable} />
+          </div>
 
-              {/* Table */}
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-gray-50 border-b border-gray-200">
-                    <tr>
-                      <th className="px-6 py-3 text-left font-semibold text-gray-700">Bahan Baku</th>
-                      <th className="px-6 py-3 text-center font-semibold text-gray-700">Satuan</th>
-                      <th className="px-6 py-3 text-center font-semibold text-gray-700">Sistem</th>
-                      <th className="px-6 py-3 text-center font-semibold text-gray-700">Fisik</th>
-                      <th className="px-6 py-3 text-center font-semibold text-gray-700">Selisih</th>
-                      <th className="px-6 py-3 text-center font-semibold text-gray-700">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {so.products.map((item, idx) => (
-                      <tr key={item.ingredientId} className={`border-b ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
-                        <td className="px-6 py-4">
-                          <p className="font-semibold text-gray-800">{item.ingredientName}</p>
-                        </td>
-                        <td className="px-6 py-4 text-center">
-                          <span className="bg-gray-200 text-gray-700 px-2 py-1 rounded text-xs font-bold">
-                            {item.unit}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 text-center text-gray-800 font-semibold">
-                          {item.systemStock}
-                        </td>
-                        <td className="px-6 py-4 text-center">
-                          <input
-                            type="number"
-                            step="0.01"
-                            value={item.physicalStock}
-                            onChange={(e) => handleUpdatePhysicalStock(so.id, item.ingredientId, parseFloat(e.target.value) || 0)}
-                            className="w-24 px-2 py-1 border border-gray-300 rounded text-center focus:ring-2 focus:ring-blue-500 outline-none text-black"
-                          />
-                        </td>
-                        <td className="px-6 py-4 text-center">
-                          <p className={`font-semibold ${item.difference === 0 ? 'text-gray-800' : item.difference > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                            {item.difference > 0 ? '+' : ''}{item.difference}
-                          </p>
-                        </td>
-                        <td className="px-6 py-4 text-center">
-                          {item.difference === 0 ? (
-                            <span className="inline-flex items-center gap-1 px-3 py-1 bg-green-100 text-green-800 rounded-full text-xs font-semibold">
-                              <Check size={14} /> Cocok
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 px-3 py-1 bg-yellow-100 text-yellow-800 rounded-full text-xs font-semibold">
-                              <AlertTriangle size={14} /> Selisih
-                            </span>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+          {/* Expanded detail for selected draft */}
+          {expandedDetail && stockOpnameList.find((s) => s.id === expandedDetail) && (
+            (() => {
+              const so = stockOpnameList.find((s) => s.id === expandedDetail)!;
+              return (
+                <div key={so.id} className="bg-white rounded-lg shadow-md overflow-hidden border border-blue-200">
+                  <div className="bg-gradient-to-r from-blue-500 to-blue-600 text-white p-5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1">
+                        <h3 className="text-lg font-bold">{so.id}</h3>
+                        <p className="text-blue-100 text-sm">Tanggal: {formatDate(so.date)}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm text-blue-100">Nilai Aset</p>
+                        <p className="text-2xl font-bold">{formatCurrency(so.totalValue)}</p>
+                      </div>
+                    </div>
+                  </div>
 
-              {/* Catatan & Tombol */}
-              <div className="bg-gray-50 border-t border-gray-200 p-5 space-y-4">
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Catatan Audit</label>
-                  <textarea
-                    value={so.notes}
-                    onChange={(e) => setStockOpnameList(stockOpnameList.map(item => item.id === so.id ? { ...item, notes: e.target.value } : item))}
-                    placeholder="Misal: Biji kopi tumpah 100 gram saat shift pagi..."
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg outline-none resize-none text-gray-700"
-                    rows={2}
-                  />
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead className="bg-gray-50 border-b border-gray-200">
+                        <tr>
+                          <th className="px-6 py-3 text-left font-semibold text-gray-700">Bahan Baku</th>
+                          <th className="px-6 py-3 text-center font-semibold text-gray-700">Satuan</th>
+                          <th className="px-6 py-3 text-center font-semibold text-gray-700">Sistem</th>
+                          <th className="px-6 py-3 text-center font-semibold text-gray-700">Fisik</th>
+                          <th className="px-6 py-3 text-center font-semibold text-gray-700">Selisih</th>
+                          <th className="px-6 py-3 text-center font-semibold text-gray-700">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {so.products.map((item, idx) => (
+                          <tr key={item.ingredientId} className={`border-b ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
+                            <td className="px-6 py-4">
+                              <p className="font-semibold text-gray-800">{item.ingredientName}</p>
+                            </td>
+                            <td className="px-6 py-4 text-center">
+                              <span className="bg-gray-200 text-gray-700 px-2 py-1 rounded text-xs font-bold">{item.unit}</span>
+                            </td>
+                            <td className="px-6 py-4 text-center text-gray-800 font-semibold">{item.systemStock}</td>
+                            <td className="px-6 py-4 text-center">
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={item.physicalStock}
+                                onChange={(e) => handleUpdatePhysicalStock(so.id, item.ingredientId, parseFloat(e.target.value) || 0)}
+                                className="w-24 px-2 py-1 border border-gray-300 rounded text-center focus:ring-2 focus:ring-blue-500 outline-none text-black"
+                              />
+                            </td>
+                            <td className="px-6 py-4 text-center">
+                              <p className={`font-semibold ${item.difference === 0 ? 'text-gray-800' : item.difference > 0 ? 'text-green-600' : 'text-red-600'}`}>{item.difference > 0 ? '+' : ''}{item.difference}</p>
+                            </td>
+                            <td className="px-6 py-4 text-center">
+                              {item.difference === 0 ? (
+                                <span className="inline-flex items-center gap-1 px-3 py-1 bg-green-100 text-green-800 rounded-full text-xs font-semibold"><Check size={14} /> Cocok</span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 px-3 py-1 bg-yellow-100 text-yellow-800 rounded-full text-xs font-semibold"><AlertTriangle size={14} /> Selisih</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div className="bg-gray-50 border-t border-gray-200 p-5 space-y-4">
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">Catatan Audit</label>
+                      <textarea
+                        value={so.notes}
+                        onChange={(e) => setStockOpnameList((prev) => prev.map(item => item.id === so.id ? { ...item, notes: e.target.value } : item))}
+                        placeholder="Misal: Biji kopi tumpah 100 gram saat shift pagi..."
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg outline-none resize-none text-gray-700"
+                        rows={2}
+                      />
+                    </div>
+                    <div className="flex justify-end gap-2">
+                      <button
+                        onClick={async () => {
+                          const confirmed = await modalConfirm('Simpan Stok Opname', 'Yakin ingin menyimpan stok opname ini ke database?', 'Ya, Simpan', 'Batal', 'question');
+                          if (!confirmed) return;
+                          modalLoading('Menyimpan stok opname...');
+                          try {
+                            await handleSaveToDatabase(so);
+                            modalSuccess('Berhasil', 'Stok opname disimpan');
+                          } catch (err) {
+                            console.error(err);
+                            showModalError('Gagal', 'Gagal menyimpan stok opname');
+                          }
+                        }}
+                        className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-2 rounded-lg transition-colors"
+                      >
+                        <Save size={18} /> Simpan ke Database
+                      </button>
+                    </div>
+                  </div>
                 </div>
-                <div className="flex justify-end gap-2">
-                  <button
-                    onClick={() => handleSaveToDatabase(so)}
-                    className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-2 rounded-lg transition-colors"
-                  >
-                    <Save size={18} /> Simpan ke Database
-                  </button>
-                </div>
-              </div>
-            </div>
-          ))}
+              );
+            })()
+          )}
         </div>
       )}
 
-      {/* Empty State untuk Draft */}
+      {/* Empty State jika tidak ada data sama sekali */}
       {stockOpnameList.length === 0 && completedOpnames.length === 0 && !isLoadingHistory && (
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-8 text-center">
           <Plus className="mx-auto text-blue-400 mb-3" size={40} />
@@ -545,9 +713,7 @@ export default function StockOpnamePage() {
         </div>
       )}
 
-      
-
-      {/* Completed Opnames Section */}
+      {/* Completed Opnames Section (Material React Table) */}
       {completedOpnames.length > 0 && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
@@ -560,93 +726,65 @@ export default function StockOpnamePage() {
               >
                 <RefreshCw size={14} className={isLoadingHistory ? 'animate-spin' : ''} /> Refresh
               </button>
-              <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-sm font-semibold">
-                {completedOpnames.length} selesai
-              </span>
+              <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-sm font-semibold">{completedOpnames.length} selesai</span>
             </div>
           </div>
 
-          {completedOpnames.map((co) => (
-            <div key={co.id} className="bg-white rounded-lg shadow-sm border border-green-200 overflow-hidden hover:shadow-md transition-shadow">
-              <div className="bg-gradient-to-r from-green-500 to-green-600 text-white p-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex-1">
-                    <h3 className="text-lg font-bold">{co.id}</h3>
-                    <p className="text-green-100 text-sm">
-                      Tanggal Opname: {formatDate(co.date)}
-                      {co.completedAt && ` • Disimpan: ${formatDate(new Date(co.completedAt))}`}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-sm text-green-100">Nilai Aset</p>
-                    <p className="text-2xl font-bold">{formatCurrency(co.totalValue)}</p>
-                  </div>
-                </div>
-              </div>
+          <div className="bg-white rounded-lg shadow-sm border border-green-200 overflow-hidden p-4">
+            <MaterialReactTable table={historyTable} />
+          </div>
 
-              <div className="p-4 flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-600">
-                    {co.products.length} item •{' '}
-                    <span className={co.products.some(p => p.difference !== 0) ? 'text-yellow-600 font-semibold' : 'text-green-600'}>
-                      {co.products.some(p => p.difference !== 0) ? 'Ada Selisih' : 'Semua Cocok'}
-                    </span>
-                  </p>
-                  {co.notes && <p className="text-sm text-gray-500 mt-1">Catatan: {co.notes}</p>}
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setExpandedDetail(expandedDetail === co.id ? null : co.id)}
-                    className="flex items-center gap-1 px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-semibold rounded transition-colors"
-                  >
-                    <Eye size={14} /> Detail
-                  </button>
-                  <button
-                    onClick={() => handleClearCompleted(co.id)}
-                    className="flex items-center gap-1 px-3 py-1 bg-red-100 hover:bg-red-200 text-red-700 text-xs font-semibold rounded transition-colors"
-                  >
-                    <Trash2 size={14} /> Hapus
-                  </button>
-                </div>
-              </div>
+          {/* Expanded detail for selected history */}
+          {expandedDetail && completedOpnames.find((s) => s.id === expandedDetail) && (
+            (() => {
+              const co = completedOpnames.find((s) => s.id === expandedDetail)!;
+              return (
+                <div key={co.id} className="bg-white rounded-lg shadow-sm border border-green-200 overflow-hidden hover:shadow-md transition-shadow">
+                  <div className="bg-gradient-to-r from-green-500 to-green-600 text-white p-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1">
+                        <h3 className="text-lg font-bold">{co.id}</h3>
+                        <p className="text-green-100 text-sm">Tanggal Opname: {formatDate(co.date)}{co.completedAt && ` • Disimpan: ${formatDate(new Date(co.completedAt))}`}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm text-green-100">Nilai Aset</p>
+                        <p className="text-2xl font-bold">{formatCurrency(co.totalValue)}</p>
+                      </div>
+                    </div>
+                  </div>
 
-              {/* Expandable Detail */}
-              {expandedDetail === co.id && (
-                <div className="bg-gray-50 border-t border-gray-200 p-4">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-gray-200">
-                        <th className="text-left font-semibold text-gray-700 pb-2">Bahan</th>
-                        <th className="text-center font-semibold text-gray-700 pb-2">Sistem</th>
-                        <th className="text-center font-semibold text-gray-700 pb-2">Fisik</th>
-                        <th className="text-center font-semibold text-gray-700 pb-2">Selisih</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {co.products && co.products.length > 0 ? (
-                        co.products.map((item) => (
-                          <tr key={item.ingredientId} className="border-b border-gray-200">
-                            <td className="py-2 text-gray-800 font-semibold">{item.ingredientName || 'Tidak ada nama'}</td>
-                            <td className="text-center text-gray-700">{item.systemStock} {item.unit}</td>
-                            <td className="text-center text-gray-700">{item.physicalStock} {item.unit}</td>
-                            <td className={`text-center font-semibold ${item.difference === 0 ? 'text-gray-700' : item.difference > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                              {item.difference > 0 ? '+' : ''}{item.difference}
-                            </td>
-                          </tr>
-                        ))
-                      ) : (
-                        <tr>
-                          <td colSpan={4} className="py-4 text-center text-gray-500 text-sm">
-                            Tidak ada data item tersedia
-                          </td>
+                  <div className="p-4">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-gray-200">
+                          <th className="text-left font-semibold text-gray-700 pb-2">Bahan</th>
+                          <th className="text-center font-semibold text-gray-700 pb-2">Sistem</th>
+                          <th className="text-center font-semibold text-gray-700 pb-2">Fisik</th>
+                          <th className="text-center font-semibold text-gray-700 pb-2">Selisih</th>
                         </tr>
-                      )}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {co.products && co.products.length > 0 ? (
+                          co.products.map((item) => (
+                            <tr key={item.ingredientId} className="border-b border-gray-200">
+                              <td className="py-2 text-gray-800 font-semibold">{item.ingredientName || 'Tidak ada nama'}</td>
+                              <td className="text-center text-gray-700">{item.systemStock} {item.unit}</td>
+                              <td className="text-center text-gray-700">{item.physicalStock} {item.unit}</td>
+                              <td className={`text-center font-semibold ${item.difference === 0 ? 'text-gray-700' : item.difference > 0 ? 'text-green-600' : 'text-red-600'}`}>{item.difference > 0 ? '+' : ''}{item.difference}</td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan={4} className="py-4 text-center text-gray-500 text-sm">Tidak ada data item tersedia</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
-              )}
-            </div>
-          ))}
+              );
+            })()
+          )}
         </div>
       )}
     </div>
