@@ -27,6 +27,7 @@ export interface Menu {
   categoryId: string;
   isAvailable: boolean;
   trackStock: boolean;
+  isFavorite?: boolean;
   recipe?: RecipeItemInput[];
 }
 
@@ -88,6 +89,7 @@ export const menuService = {
         category_id?: string;
         categoryId?: string;
         is_available?: boolean;
+        is_favorite?: boolean;
         track_stock?: boolean;
         recipe_ingredients?: RecipeIngredient[];
       }
@@ -103,6 +105,7 @@ export const menuService = {
         price: m.price || 0,
         categoryId: m.category_id || m.categoryId || '',
         isAvailable: m.is_available !== false,
+        isFavorite: m.is_favorite === true,
         trackStock: m.track_stock === true,
         recipe: m.recipe_ingredients
           ? m.recipe_ingredients.map((r: RecipeIngredient) => ({
@@ -239,6 +242,7 @@ export const menuService = {
     description: string | null;
     price: number;
     is_available: boolean;
+    is_favorite: boolean;
     track_stock: boolean;
     recipe: Array<{
       ingredient_id: string;
@@ -266,6 +270,7 @@ export const menuService = {
           price: payload.price,
           categoryId: payload.category_id,
           isAvailable: payload.is_available,
+          isFavorite: payload.is_favorite,
           trackStock: payload.track_stock,
           recipe: payload.recipe.map((r) => ({
             ingredientId: r.ingredient_id,
@@ -300,6 +305,7 @@ export const menuService = {
       description: string | null;
       price: number;
       is_available: boolean;
+      is_favorite: boolean;
       track_stock: boolean;
       recipe: Array<{
         ingredient_id: string;
@@ -331,6 +337,22 @@ export const menuService = {
       }
     } catch (error) {
       console.error('Error deleting menu:', error);
+      throw error;
+    }
+  },
+
+  // Toggle favorit status menu
+  toggleFavorite: async (menuId: string, isFavorite: boolean): Promise<void> => {
+    try {
+      const response = await api.put<ApiResponse<unknown>>(`/api/menus/${menuId}`, {
+        is_favorite: isFavorite,
+      });
+
+      if (response.data.status !== 'success' && response.status !== 200) {
+        throw new Error(response.data.detail || 'Gagal memperbarui status favorit');
+      }
+    } catch (error) {
+      console.error('Error toggling favorite:', error);
       throw error;
     }
   },

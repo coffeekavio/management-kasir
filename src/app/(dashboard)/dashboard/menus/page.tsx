@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Plus, Edit2, Trash2, X, Save, Coffee, Layers, Eye, EyeOff, CheckSquare, Square, Trash } from 'lucide-react';
+import { Plus, Edit2, Trash2, X, Save, Coffee, Layers, Eye, EyeOff, CheckSquare, Square, Trash, Heart } from 'lucide-react';
 import Link from 'next/link';
 import { formatCurrency } from '@/lib/utils';
 import { menuService, type Category, type Ingredient, type RecipeItemInput, type Menu } from '@/services/menuService';
@@ -44,6 +44,7 @@ export default function MenusPage() {
     categoryId: '',
     isAvailable: true,
     trackStock: false,
+    isFavorite: false,
   });
   
   // State khusus baris resep yang sedang diracik di dalam modal form menu
@@ -110,6 +111,7 @@ export default function MenusPage() {
       categoryId: categories[0]?.id || '',
       isAvailable: true,
       trackStock: false,
+      isFavorite: false,
     });
     setRecipeItems([]);
     setIsMenuModalOpen(true);
@@ -125,6 +127,7 @@ export default function MenusPage() {
       categoryId: menu.categoryId,
       isAvailable: menu.isAvailable,
       trackStock: menu.trackStock,
+      isFavorite: menu.isFavorite || false,
     });
     setRecipeItems(menu.recipe || []);
     setIsMenuModalOpen(true);
@@ -148,6 +151,30 @@ export default function MenusPage() {
   // Menghapus baris resep dari rancangan
   const removeRecipeRow = (index: number) => {
     setRecipeItems(recipeItems.filter((_, idx) => idx !== index));
+  };
+
+  // Toggle Favorit Status Menu
+  const handleToggleFavorite = async (menu: Menu) => {
+    try {
+      modalLoading(menu.isFavorite ? 'Menghapus dari favorit...' : 'Menambah ke favorit...');
+      await menuService.toggleFavorite(menu.id, !menu.isFavorite);
+      
+      // Update local state
+      setMenus((prev) =>
+        prev.map((m) =>
+          m.id === menu.id ? { ...m, isFavorite: !m.isFavorite } : m
+        )
+      );
+      
+      modalSuccess(
+        'Berhasil',
+        menu.isFavorite ? `Menu "${menu.name}" dihapus dari favorit` : `Menu "${menu.name}" ditambahkan ke favorit`
+      );
+    } catch (error: unknown) {
+      console.error('Gagal mengubah status favorit:', error);
+      const errorMsg = error instanceof Error ? error.message : 'Gagal mengubah status favorit';
+      showModalError('Gagal', errorMsg);
+    }
   };
 
   // Submit Simpan Form Menu (POST/PUT)
@@ -198,6 +225,7 @@ export default function MenusPage() {
         description: menuForm.description || null,
         price: Number(menuForm.price),
         is_available: menuForm.isAvailable,
+        is_favorite: menuForm.isFavorite,
         track_stock: menuForm.trackStock,
         // Jika trackStock true, kirim array recipe, jika false kirim array kosong
         recipe: menuForm.trackStock 
@@ -292,6 +320,24 @@ export default function MenusPage() {
           <span className={`px-2 py-1 rounded-full text-xs font-semibold ${cell.getValue<boolean>() ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
             {cell.getValue<boolean>() ? 'Aktif' : 'Nonaktif'}
           </span>
+        ),
+      },
+      {
+        accessorKey: 'isFavorite',
+        header: 'Favorit',
+        enableSorting: false,
+        Cell: ({ row }) => (
+          <button
+            onClick={() => handleToggleFavorite(row.original)}
+            className={`inline-flex items-center justify-center p-1.5 rounded transition-colors ${
+              row.original.isFavorite
+                ? 'text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100'
+                : 'text-gray-400 hover:text-gray-600 bg-gray-50 hover:bg-gray-100'
+            }`}
+            title={row.original.isFavorite ? 'Hapus dari favorit' : 'Tambah ke favorit'}
+          >
+            <Heart size={16} fill={row.original.isFavorite ? 'currentColor' : 'none'} />
+          </button>
         ),
       },
       {
@@ -647,6 +693,21 @@ export default function MenusPage() {
                 />
                 <label htmlFor="isAvailableCheckbox" className="text-xs font-semibold text-gray-700 cursor-pointer">
                   Aktifkan Menu (Langsung Muncul di Layar Kasir Flutter)
+                </label>
+              </div>
+
+              {/* Favorit Menu */}
+              <div className="flex items-center gap-2 pt-2">
+                <input
+                  type="checkbox"
+                  id="isFavoriteCheckbox"
+                  checked={menuForm.isFavorite}
+                  onChange={(e) => setMenuForm({ ...menuForm, isFavorite: e.target.checked })}
+                  className="w-4 h-4 text-red-600 border-gray-300 rounded"
+                />
+                <label htmlFor="isFavoriteCheckbox" className="text-xs font-semibold text-gray-700 cursor-pointer flex items-center gap-1">
+                  <Heart size={14} className="text-red-600" />
+                  Tandai Sebagai Menu Favorit
                 </label>
               </div>
 
