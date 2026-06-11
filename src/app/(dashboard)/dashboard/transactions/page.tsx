@@ -1,34 +1,219 @@
 'use client';
 
-import { useState } from 'react';
-import { FileText, Filter, Search } from 'lucide-react';
-import { mockTransactions } from '@/lib/mockData';
+import { useState, useEffect,useMemo } from 'react';
+import { FileText, Filter, Search, Edit2, Trash2, Eye } from 'lucide-react';
 import { formatCurrency, formatDate, exportToExcel, exportToPDF } from '@/lib/utils';
+import { getTransactions, getTransactionDetail, deleteTransaction, updateTransaction } from '@/services/transactions';
+import {
+  MaterialReactTable,
+  useMaterialReactTable,
+  type MRT_ColumnDef,
+} from 'material-react-table';
+
+interface TransactionList {
+  id: string;
+  receipt_number: string;
+  total_amount: number;
+  payment_method: string;
+  status: string;
+  created_at: string;
+}
 
 export default function TransactionsPage() {
+  // State untuk list transaksi
+  const [transactions, setTransactions] = useState<TransactionList[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // State untuk filter & search
   const [searchTerm, setSearchTerm] = useState('');
   const [filterPaymentMethod, setFilterPaymentMethod] = useState<string>('all');
 
-  // Filter transactions
-  const filteredTransactions = mockTransactions.filter((txn) => {
-    const matchesSearch =
-      txn.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      txn.cashierName.toLowerCase().includes(searchTerm.toLowerCase());
+  // State untuk modal
+  const [selectedTransaction, setSelectedTransaction] = useState<any>(null);
+  const [showDetailModal, setShowDetailModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [transactionToDelete, setTransactionToDelete] = useState<string | null>(null);
 
-    const matchesFilter =
-      filterPaymentMethod === 'all' || txn.paymentMethod === filterPaymentMethod;
+  // State untuk modal edit
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [transactionToEdit, setTransactionToEdit] = useState<any>(null);
+  const [editLoading, setEditLoading] = useState(false);
 
-    return matchesSearch && matchesFilter;
-  });
+  // Fetch data transaksi saat mount
+  useEffect(() => {
+    fetchTransactions();
+  }, []);
+
+  const fetchTransactions = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await getTransactions();
+      setTransactions(data);
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Gagal mengambil data transaksi';
+      setError(errorMsg);
+      console.error('Error fetching transactions:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Handle lihat detail
+  const handleViewDetail = async (transactionId: string) => {
+    try {
+      const detail = await getTransactionDetail(transactionId);
+      setSelectedTransaction(detail);
+      setShowDetailModal(true);
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Gagal mengambil detail transaksi';
+      alert(`Error: ${errorMsg}`);
+    }
+  };
+
+  // Handle hapus transaksi
+  const handleDelete = async () => {
+    if (!transactionToDelete) return;
+    try {
+      await deleteTransaction(transactionToDelete);
+      setTransactions(transactions.filter(t => t.id !== transactionToDelete));
+      setShowDeleteModal(false);
+      setTransactionToDelete(null);
+      alert('Transaksi berhasil dihapus');
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Gagal menghapus transaksi';
+      alert(`Error: ${errorMsg}`);
+    }
+  };
+
+  // Handle edit transaksi
+const handleEditTransaction = async (transactionId: string) => {
+  try {
+    const detail = await getTransactionDetail(transactionId);
+    setTransactionToEdit(detail);
+    setShowEditModal(true);
+  } catch (err) {
+    const errorMsg = err instanceof Error ? err.message : 'Gagal mengambil detail transaksi';
+    alert(`Error: ${errorMsg}`);
+  }
+};
+
+  const handleSaveEdit = async (updatedData: any) => {
+    if (!transactionToEdit) return;
+    try {
+      setEditLoading(true);
+      await updateTransaction(transactionToEdit.id, updatedData);
+      
+      // Update list transaksi
+      await fetchTransactions();
+      
+      setShowEditModal(false);
+      setTransactionToEdit(null);
+      alert('Transaksi berhasil diupdate');
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Gagal mengupdate transaksi';
+      alert(`Error: ${errorMsg}`);
+    } finally {
+      setEditLoading(false);
+    }
+  };
+
+  const columns = useMemo<MRT_ColumnDef<TransactionList>[]>(
+    () => [
+      {
+        accessorKey: 'receipt_number',
+        header: 'No Resit',
+      },
+      {
+        accessorKey: 'created_at',
+        header: 'Tanggal',
+        Cell: ({ cell }) => formatDate(new Date(cell.getValue<string>())),
+      },
+      {
+        accessorKey: 'payment_method',
+        header: 'Metode Pembayaran',
+      },
+      {
+        accessorKey: 'status',
+        header: 'Status',
+        Cell: ({ cell }) => (
+          <span
+            className={`px-2 py-1 rounded-full text-xs font-semibold ${
+            cell.getValue<string>() === 'completed'
+              ? 'bg-green-100 text-green-800'
+              : 'bg-yellow-100 text-yellow-800'
+          }`}
+        >
+          {cell.getValue<string>()}
+        </span>
+        ),
+      },
+      {
+        accessorKey: 'total_amount',
+        header: 'Jumlah',
+        Cell: ({ cell }) => (
+          <span className="font-semibold">
+            {formatCurrency(cell.getValue<number>() ?? 0)}
+          </span>
+        ),
+      },
+      {
+        id: 'actions',
+        header: 'Aksi',
+        enableSorting: false,
+        Cell: ({ row }) => (
+          <div className="flex gap-2 justify-end">
+            <button
+              onClick={() => handleViewDetail(row.original.id)}
+              className="text-blue-600 hover:text-blue-800 p-2 rounded hover:bg-blue-50"
+            >
+              <Eye size={18} />
+            </button>
+            <button
+              onClick={() => handleEditTransaction(row.original.id)}
+              className="text-yellow-600 hover:text-yellow-800 p-2 rounded hover:bg-yellow-50"
+            >
+              <Edit2 size={18} />
+            </button>
+            <button
+              onClick={() => {
+                setTransactionToDelete(row.original.id);
+                setShowDeleteModal(true);
+              }}
+              className="text-red-600 hover:text-red-800 p-2 rounded hover:bg-red-50"
+            >
+              <Trash2 size={18} />
+            </button>
+          </div>
+        ),
+      },
+    ],
+    []
+  );
+
+  const filteredTransactions = useMemo(() => {
+    return transactions.filter((txn) => {
+      const matchesSearch =
+        txn.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        txn.receipt_number.toLowerCase().includes(searchTerm.toLowerCase());
+
+      const matchesFilter =
+        filterPaymentMethod === 'all' || txn.payment_method === filterPaymentMethod;
+
+      return matchesSearch && matchesFilter;
+    });
+  }, [transactions, searchTerm, filterPaymentMethod]);
 
   // Export handlers
   const handleExportExcel = () => {
     const data = filteredTransactions.map((txn) => ({
       'ID Transaksi': txn.id,
-      Tanggal: formatDate(txn.date),
-      Kasir: txn.cashierName,
-      'Metode Pembayaran': txn.paymentMethod,
-      Jumlah: formatCurrency(txn.amount),
+      'No Resit': txn.receipt_number,
+      'Tanggal': formatDate(new Date(txn.created_at)),
+      'Metode Pembayaran': txn.payment_method,
+      'Status': txn.status,
+      'Jumlah': txn.total_amount,
     }));
     exportToExcel(data, `Transaksi_${new Date().toISOString().split('T')[0]}`);
   };
@@ -36,17 +221,44 @@ export default function TransactionsPage() {
   const handleExportPDF = () => {
     const data = filteredTransactions.map((txn) => ({
       id: txn.id,
-      date: formatDate(txn.date),
-      cashierName: txn.cashierName,
-      paymentMethod: txn.paymentMethod,
-      amount: txn.amount,
+      receipt_number: txn.receipt_number,
+      date: formatDate(new Date(txn.created_at)),
+      payment_method: txn.payment_method,
+      status: txn.status,
+      amount: txn.total_amount,
     }));
     exportToPDF(
       data,
       `Laporan_Transaksi_${new Date().toISOString().split('T')[0]}`,
-      ['id', 'date', 'cashierName', 'paymentMethod', 'amount']
+      ['id', 'receipt_number', 'date', 'payment_method', 'status', 'amount']
     );
   };
+
+  const table = useMaterialReactTable({
+    columns,
+    data: filteredTransactions,
+    state: {
+      isLoading: loading,
+    },
+    enablePagination: true,
+    enableSorting: true,
+    enableColumnFilters: false,
+    enableGlobalFilter: false,
+    initialState: {
+      pagination: { pageIndex: 0, pageSize: 10 },
+    },
+    muiTableBodyCellProps: {
+      sx: {
+        padding: '12px 16px',
+      },
+    },
+    muiTableHeadCellProps: {
+      sx: {
+        backgroundColor: '#f9fafb',
+        borderBottom: '1px solid #e5e7eb',
+      },
+    },
+  });
 
   return (
     <div className="space-y-6">
@@ -56,6 +268,19 @@ export default function TransactionsPage() {
         <p className="text-gray-600 mt-1">Kelola dan lihat semua transaksi penjualan</p>
       </div>
 
+      {/* Error Message */}
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
+          {error}
+          <button
+            onClick={fetchTransactions}
+            className="ml-2 underline font-semibold hover:text-red-900"
+          >
+            Coba Lagi
+          </button>
+        </div>
+      )}
+
       {/* Search and Filter Section */}
       <div className="bg-white rounded-lg shadow-md p-6">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
@@ -64,7 +289,7 @@ export default function TransactionsPage() {
             <Search size={20} className="absolute left-3 top-3 text-gray-400" />
             <input
               type="text"
-              placeholder="Cari ID atau Kasir..."
+              placeholder="Cari ID atau No Resit..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
@@ -81,8 +306,8 @@ export default function TransactionsPage() {
             >
               <option value="all">Semua Metode</option>
               <option value="cash">Tunai</option>
+              <option value="qris_static">QRIS</option>
               <option value="card">Kartu</option>
-              <option value="digital">Digital</option>
             </select>
           </div>
 
@@ -107,98 +332,396 @@ export default function TransactionsPage() {
 
         {/* Results info */}
         <p className="text-sm text-gray-600">
-          Menampilkan {filteredTransactions.length} dari {mockTransactions.length} transaksi
+          Menampilkan {filteredTransactions.length} dari {transactions.length} transaksi
         </p>
       </div>
 
+      {/* Loading State */}
+      {loading && (
+        <div className="bg-white rounded-lg shadow-md p-8 text-center">
+          <div className="animate-spin h-8 w-8 border-4 border-blue-500 border-t-transparent rounded-full mx-auto"></div>
+          <p className="mt-4 text-gray-600">Memuat data transaksi...</p>
+        </div>
+      )}
+
       {/* Transactions Table */}
-      <div className="bg-white rounded-lg shadow-md overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-gray-50 border-b border-gray-200">
-              <tr>
-                <th className="px-6 py-3 text-left font-semibold text-gray-700">ID Transaksi</th>
-                <th className="px-6 py-3 text-left font-semibold text-gray-700">Tanggal</th>
-                <th className="px-6 py-3 text-left font-semibold text-gray-700">Kasir</th>
-                <th className="px-6 py-3 text-left font-semibold text-gray-700">Metode Pembayaran</th>
-                <th className="px-6 py-3 text-left font-semibold text-gray-700">Produk</th>
-                <th className="px-6 py-3 text-right font-semibold text-gray-700">Jumlah</th>
-                <th className="px-6 py-3 text-center font-semibold text-gray-700">Aksi</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredTransactions.map((txn, idx) => (
-                <tr
-                  key={txn.id}
-                  className={`border-b border-gray-200 hover:bg-gray-50 ${
-                    idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'
-                  }`}
-                >
-                  <td className="px-6 py-4 font-semibold text-gray-800">{txn.id}</td>
-                  <td className="px-6 py-4 text-gray-700">{formatDate(txn.date)}</td>
-                  <td className="px-6 py-4 text-gray-700">{txn.cashierName}</td>
-                  <td className="px-6 py-4">
-                    <span
-                      className={`px-3 py-1 rounded-full text-xs font-semibold capitalize ${
-                        txn.paymentMethod === 'cash'
-                          ? 'bg-green-100 text-green-800'
-                          : txn.paymentMethod === 'card'
-                          ? 'bg-blue-100 text-blue-800'
-                          : 'bg-purple-100 text-purple-800'
-                      }`}
-                    >
-                      {txn.paymentMethod}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-gray-700">
-                    {txn.items.map((item) => item.productName).join(', ')}
-                  </td>
-                  <td className="px-6 py-4 text-right font-semibold text-gray-800">
-                    {formatCurrency(txn.amount)}
-                  </td>
-                  <td className="px-6 py-4 text-center">
-                    <button className="text-blue-600 hover:text-blue-800 font-semibold text-sm">
-                      Detail
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      {!loading && (
+        <div className="bg-white rounded-lg shadow-md border border-gray-100 overflow-hidden">
+          <MaterialReactTable table={table} />
         </div>
+      )}
 
-        {filteredTransactions.length === 0 && (
-          <div className="text-center py-8 text-gray-500">
-            Tidak ada transaksi yang sesuai dengan filter
+      {/* Summary Stats */}
+      {!loading && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="bg-white rounded-lg shadow-md p-6">
+            <p className="text-gray-600 text-sm mb-2">Total Transaksi</p>
+            <p className="text-2xl font-bold text-gray-800">{filteredTransactions.length}</p>
           </div>
-        )}
-      </div>
+          <div className="bg-white rounded-lg shadow-md p-6">
+            <p className="text-gray-600 text-sm mb-2">Total Pendapatan</p>
+            <p className="text-2xl font-bold text-gray-800">
+              {formatCurrency(
+                filteredTransactions.reduce((sum, txn) => sum + txn.total_amount, 0)
+              )}
+            </p>
+          </div>
+          <div className="bg-white rounded-lg shadow-md p-6">
+            <p className="text-gray-600 text-sm mb-2">Rata-rata Transaksi</p>
+            <p className="text-2xl font-bold text-gray-800">
+              {formatCurrency(
+                filteredTransactions.length > 0
+                  ? filteredTransactions.reduce((sum, txn) => sum + txn.total_amount, 0) /
+                      filteredTransactions.length
+                  : 0
+              )}
+            </p>
+          </div>
+        </div>
+      )}
 
-      {/* Summary */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-white rounded-lg shadow-md p-6">
-          <p className="text-gray-600 text-sm mb-2">Total Transaksi</p>
-          <p className="text-2xl font-bold text-gray-800">{filteredTransactions.length}</p>
+      {/* Detail Modal */}
+      {showDetailModal && selectedTransaction && (
+        <DetailModal
+          transaction={selectedTransaction}
+          onClose={() => setShowDetailModal(false)}
+        />
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteModal && (
+        <DeleteConfirmationModal
+          onConfirm={handleDelete}
+          onCancel={() => {
+            setShowDeleteModal(false);
+            setTransactionToDelete(null);
+          }}
+        />
+      )}
+
+      {/* Edit Modal */}
+      {showEditModal && transactionToEdit && (
+        <EditModal
+          transaction={transactionToEdit}
+          onSave={handleSaveEdit}
+          onClose={() => {
+            setShowEditModal(false);
+            setTransactionToEdit(null);
+          }}
+          loading={editLoading}
+        />
+      )}
+    </div>
+  );
+}
+
+// Detail Modal Component
+function DetailModal({
+  transaction,
+  onClose,
+}: {
+  transaction: any;
+  onClose: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-96 overflow-y-auto">
+        <div className="sticky top-0 bg-gray-50 border-b px-6 py-4 flex justify-between items-center">
+          <h2 className="text-xl font-bold text-gray-800">Detail Transaksi</h2>
+          <button
+            onClick={onClose}
+            className="text-gray-500 hover:text-gray-700"
+          >
+            ✕
+          </button>
         </div>
-        <div className="bg-white rounded-lg shadow-md p-6">
-          <p className="text-gray-600 text-sm mb-2">Total Pendapatan</p>
-          <p className="text-2xl font-bold text-gray-800">
-            {formatCurrency(
-              filteredTransactions.reduce((sum, txn) => sum + txn.amount, 0)
-            )}
+        <div className="p-6 space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <p className="text-gray-600 text-sm">ID Transaksi</p>
+              <p className="font-semibold text-gray-800">{transaction.id}</p>
+            </div>
+            <div>
+              <p className="text-gray-600 text-sm">No Resit</p>
+              <p className="font-semibold text-gray-800">{transaction.receipt_number}</p>
+            </div>
+            <div>
+              <p className="text-gray-600 text-sm">Metode Pembayaran</p>
+              <p className="font-semibold text-gray-800 capitalize">{transaction.payment_method}</p>
+            </div>
+            <div>
+              <p className="text-gray-600 text-sm">Status</p>
+              <p className="font-semibold text-gray-800 capitalize">{transaction.status}</p>
+            </div>
+            <div>
+              <p className="text-gray-600 text-sm">Subtotal</p>
+              <p className="font-semibold text-gray-800">{formatCurrency(transaction.subtotal)}</p>
+            </div>
+            <div>
+              <p className="text-gray-600 text-sm">Diskon</p>
+              <p className="font-semibold text-gray-800">{formatCurrency(transaction.discount_amount)}</p>
+            </div>
+            <div>
+              <p className="text-gray-600 text-sm">Total</p>
+              <p className="font-bold text-lg text-green-600">{formatCurrency(transaction.total_amount)}</p>
+            </div>
+            <div>
+              <p className="text-gray-600 text-sm">Bayar</p>
+              <p className="font-semibold text-gray-800">{formatCurrency(transaction.amount_tendered)}</p>
+            </div>
+          </div>
+
+          {/* Items */}
+          <div className="mt-6 border-t pt-4">
+            <h3 className="font-semibold text-gray-800 mb-3">Item Transaksi</h3>
+            <div className="space-y-2">
+              {transaction.items?.map((item: any, idx: number) => (
+                <div key={idx} className="flex justify-between text-sm text-gray-700 bg-gray-50 p-2 rounded">
+                  <span>{item.quantity}x Menu (ID: {item.menu_id})</span>
+                  <span className="font-semibold">{formatCurrency(item.subtotal)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+        <div className="bg-gray-50 border-t px-6 py-3 text-right">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white font-semibold rounded-lg"
+          >
+            Tutup
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Delete Confirmation Modal Component
+function DeleteConfirmationModal({
+  onConfirm,
+  onCancel,
+}: {
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+      <div className="bg-white rounded-lg shadow-xl max-w-sm w-full mx-4">
+        <div className="p-6">
+          <h2 className="text-xl font-bold text-gray-800 mb-3">Hapus Transaksi?</h2>
+          <p className="text-gray-600 mb-6">
+            Apakah Anda yakin ingin menghapus transaksi ini? Tindakan ini tidak dapat dibatalkan.
           </p>
+          <div className="flex gap-3 justify-end">
+            <button
+              onClick={onCancel}
+              className="px-4 py-2 bg-gray-300 hover:bg-gray-400 text-gray-800 font-semibold rounded-lg"
+            >
+              Batal
+            </button>
+            <button
+              onClick={onConfirm}
+              className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg"
+            >
+              Hapus
+            </button>
+          </div>
         </div>
-        <div className="bg-white rounded-lg shadow-md p-6">
-          <p className="text-gray-600 text-sm mb-2">Rata-rata Transaksi</p>
-          <p className="text-2xl font-bold text-gray-800">
-            {formatCurrency(
-              filteredTransactions.length > 0
-                ? filteredTransactions.reduce((sum, txn) => sum + txn.amount, 0) /
-                    filteredTransactions.length
-                : 0
-            )}
-          </p>
+      </div>
+    </div>
+  );
+}
+
+// Edit Modal Component
+function EditModal({
+  transaction,
+  onSave,
+  onClose,
+  loading,
+}: {
+  transaction: any;
+  onSave: (data: any) => void;
+  onClose: () => void;
+  loading: boolean;
+}) {
+  const [formData, setFormData] = useState({
+    discount_amount: transaction.discount_amount || 0,
+    voucher_discount_amount: transaction.voucher_discount_amount || 0,
+    payment_method: transaction.payment_method || 'cash',
+    amount_tendered: transaction.amount_tendered || 0,
+    status: transaction.status || 'completed',
+  });
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value } = e.target;
+    setFormData((prev) => ({
+      ...prev,
+      [name]: name === 'status' || name === 'payment_method' ? value : parseInt(value) || 0,
+    }));
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    onSave(formData);
+  };
+
+  // Hitung total baru
+  const newTotal = Math.max(
+    0,
+    transaction.subtotal - formData.discount_amount - formData.voucher_discount_amount
+  );
+  const changeAmount =
+    formData.payment_method.toLowerCase() === 'cash'
+      ? Math.max(0, formData.amount_tendered - newTotal)
+      : 0;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+      <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+        <div className="bg-gray-50 border-b px-6 py-4 flex justify-between items-center">
+          <h2 className="text-xl font-bold text-gray-800">Edit Transaksi</h2>
+          <button
+            onClick={onClose}
+            className="text-gray-500 hover:text-gray-700"
+            disabled={loading}
+          >
+            ✕
+          </button>
         </div>
+
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          {/* Discount Amount */}
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">
+              Diskon Transaksi
+            </label>
+            <input
+              type="number"
+              name="discount_amount"
+              value={formData.discount_amount}
+              onChange={handleChange}
+              min="0"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-black"
+            />
+          </div>
+
+          {/* Voucher Discount */}
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">
+              Diskon Voucher
+            </label>
+            <input
+              type="number"
+              name="voucher_discount_amount"
+              value={formData.voucher_discount_amount}
+              onChange={handleChange}
+              min="0"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-black"
+            />
+          </div>
+
+          {/* Payment Method */}
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">
+              Metode Pembayaran
+            </label>
+            <select
+              name="payment_method"
+              value={formData.payment_method}
+              onChange={handleChange}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-black"
+            >
+              <option value="cash">Tunai</option>
+              <option value="qris_static">QRIS</option>
+              <option value="card">Kartu</option>
+            </select>
+          </div>
+
+          {/* Amount Tendered */}
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">
+              Jumlah Dibayar
+            </label>
+            <input
+              type="number"
+              name="amount_tendered"
+              value={formData.amount_tendered}
+              onChange={handleChange}
+              min="0"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-black"
+            />
+          </div>
+
+          {/* Status */}
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">
+              Status
+            </label>
+            <select
+              name="status"
+              value={formData.status}
+              onChange={handleChange}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-black"
+            >
+              <option value="completed">Completed</option>
+              <option value="pending">Pending</option>
+              <option value="cancelled">Cancelled</option>
+            </select>
+          </div>
+
+          {/* Summary Info */}
+          <div className="bg-gray-50 p-3 rounded-lg border border-gray-200">
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-gray-600">Subtotal:</span>
+                <span className="font-semibold text-gray-600">{formatCurrency(transaction.subtotal)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">Diskon:</span>
+                <span className="font-semibold text-gray-600">
+                  -{formatCurrency(formData.discount_amount + formData.voucher_discount_amount)}
+                </span>
+              </div>
+              <div className="border-t border-gray-300 pt-2 flex justify-between font-bold">
+                <span className='text-black'>Total Baru:</span>
+                <span className="text-green-600">{formatCurrency(newTotal)}</span>
+              </div>
+              {formData.payment_method.toLowerCase() === 'cash' && (
+                <div className="flex justify-between text-orange-600 font-semibold">
+                  <span>Kembalian:</span>
+                  <span>{formatCurrency(changeAmount)}</span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Buttons */}
+          <div className="flex gap-3 justify-end pt-4">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={loading}
+              className="px-4 py-2 bg-gray-300 hover:bg-gray-400 text-gray-800 font-semibold rounded-lg disabled:opacity-50"
+            >
+              Batal
+            </button>
+            <button
+              type="submit"
+              disabled={loading}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg disabled:opacity-50 flex items-center gap-2"
+            >
+              {loading ? (
+                <>
+                  <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  Menyimpan...
+                </>
+              ) : (
+                'Simpan'
+              )}
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );
