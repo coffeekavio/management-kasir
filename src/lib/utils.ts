@@ -85,3 +85,22 @@ export const calculateHPP = (transactions: Transaction[]): number => {
     return total + itemsHPP;
   }, 0);
 };
+
+export const formatDateTime = (date: Date | string | null | undefined): string => {
+  if (!date) return 'Tanggal tidak tersedia';
+  
+  const d = typeof date === 'string' ? new Date(date) : date;
+  
+  if (isNaN(d.getTime())) {
+    return 'Tanggal tidak valid';
+  }
+  
+  return d.toLocaleDateString('id-ID', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
+};

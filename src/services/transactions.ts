@@ -8,13 +8,16 @@ export interface TransactionFromAPI {
   payment_method: string;
   status: string;
   created_at: string;
+  cashier_name: string;
 }
+
 
 export interface TransactionDetailFromAPI {
   id: string;
   receipt_number: string;
   cafe_id: string;
   cashier_id: string;
+  cashier_name?: string | null;
   member_id: string | null;
   subtotal: number;
   discount_amount: number;
@@ -28,6 +31,7 @@ export interface TransactionDetailFromAPI {
   items: Array<{
     transaction_id: string;
     menu_id: string;
+    menu_name: string;
     quantity: number;
     price: number;
     item_discount: number;

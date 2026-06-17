@@ -87,17 +87,19 @@ export default function IngredientsPage() {
           <div className="flex items-center justify-center gap-2">
             <button
               onClick={() => handleOpenEditModal(row.original)}
-              className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors"
+              className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700 px-2 py-1 rounded hover:bg-blue-50"
               title="Edit"
             >
               <Edit2 size={16} />
+              Ubah
             </button>
             <button
               onClick={() => handleDelete(row.original.id)}
-              className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
+              className="inline-flex items-center gap-1 text-xs font-semibold text-red-600 hover:text-red-700 px-2 py-1 rounded hover:bg-red-50"
               title="Delete"
             >
               <Trash2 size={16} />
+              Hapus
             </button>
           </div>
         ),

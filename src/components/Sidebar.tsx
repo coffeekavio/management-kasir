@@ -17,7 +17,7 @@ export const Sidebar = () => {
     { href: '/dashboard', icon: Home, label: 'Dashboard' },
     { href: '/dashboard/transactions', icon: ShoppingCart, label: 'Transaksi' },
     { href: '/dashboard/analytics', icon: BarChart3, label: 'Analitik' },
-    { href: '/dashboard/cashiers', icon: Users, label: 'Manajemen Kasir' },
+    { href: '/dashboard/cashiers', icon: Users, label: 'Manajemen Karyawan' },
     { href: '/dashboard/members', icon: Gift, label: 'Member & Reward' },
     { href: '/dashboard/stock-opname', icon: Package, label: 'Stok Opname' },
     { href: '/dashboard/vouchers', icon: BadgePercent, label: 'Voucher Diskon' },
@@ -61,7 +61,7 @@ export const Sidebar = () => {
                 key={item.href}
                 href={item.href}
                 onClick={() => setIsOpen(false)}
-                className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+                className={`flex items-center gap-3 px-1 py-3 rounded-lg transition-colors ${
                   active
                     ? 'bg-[#1976D2] text-white border-l-4 border-[#1E88E5]'
                     : 'text-[#E3F2FD] hover:bg-[#42A5F5]/10 hover:text-white'

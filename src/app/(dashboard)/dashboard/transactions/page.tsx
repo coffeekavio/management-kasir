@@ -17,6 +17,7 @@ interface TransactionList {
   payment_method: string;
   status: string;
   created_at: string;
+  cashier_name: string;
 }
 
 export default function TransactionsPage() {
@@ -28,6 +29,7 @@ export default function TransactionsPage() {
   // State untuk filter & search
   const [searchTerm, setSearchTerm] = useState('');
   const [filterPaymentMethod, setFilterPaymentMethod] = useState<string>('all');
+  const [filterCashierName, setFilterCashierName] = useState<string>('all');
 
   // State untuk modal
   const [selectedTransaction, setSelectedTransaction] = useState<any>(null);
@@ -128,11 +130,21 @@ const handleEditTransaction = async (transactionId: string) => {
       {
         accessorKey: 'created_at',
         header: 'Tanggal',
-        Cell: ({ cell }) => formatDate(new Date(cell.getValue<string>())),
+        Cell: ({ cell }) => {
+        const date = new Date(cell.getValue<string>());
+        return date.toLocaleDateString('id-ID', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+        });
+      },  
       },
       {
         accessorKey: 'payment_method',
         header: 'Metode Pembayaran',
+        Cell: ({ cell }) => formatPaymentMethod(cell.getValue<string>()),
       },
       {
         accessorKey: 'status',
@@ -163,27 +175,30 @@ const handleEditTransaction = async (transactionId: string) => {
         header: 'Aksi',
         enableSorting: false,
         Cell: ({ row }) => (
-          <div className="flex gap-2 justify-end">
+          <div className="flex gap-2 justify-center">
             <button
               onClick={() => handleViewDetail(row.original.id)}
-              className="text-blue-600 hover:text-blue-800 p-2 rounded hover:bg-blue-50"
+              className="inline-flex items-center gap-1 text-xs font-semibold text-green-600 hover:text-green-700 px-2 py-1 rounded hover:bg-green-50"
             >
               <Eye size={18} />
+              Detail
             </button>
             <button
               onClick={() => handleEditTransaction(row.original.id)}
-              className="text-yellow-600 hover:text-yellow-800 p-2 rounded hover:bg-yellow-50"
+              className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700 px-2 py-1 rounded hover:bg-blue-50"
             >
               <Edit2 size={18} />
+              Edit
             </button>
             <button
               onClick={() => {
                 setTransactionToDelete(row.original.id);
                 setShowDeleteModal(true);
               }}
-              className="text-red-600 hover:text-red-800 p-2 rounded hover:bg-red-50"
+              className="inline-flex items-center gap-1 text-xs font-semibold text-red-600 hover:text-red-700 px-2 py-1 rounded hover:bg-red-50"
             >
               <Trash2 size={18} />
+              Hapus
             </button>
           </div>
         ),
@@ -201,9 +216,24 @@ const handleEditTransaction = async (transactionId: string) => {
       const matchesFilter =
         filterPaymentMethod === 'all' || txn.payment_method === filterPaymentMethod;
 
-      return matchesSearch && matchesFilter;
+      const matchesCashier =
+        filterCashierName === 'all' || txn.cashier_name === filterCashierName;
+
+      return matchesSearch && matchesFilter && matchesCashier;
     });
-  }, [transactions, searchTerm, filterPaymentMethod]);
+  }, [transactions, searchTerm, filterPaymentMethod, filterCashierName]);
+
+  const formatPaymentMethod = (method: string) => {
+    if (method === 'cash') return 'Tunai';
+    if (method === 'qris_static') return 'QRIS';
+    if (method === 'card') return 'Kartu';
+    return method;
+  };
+
+  const cashierOptions = useMemo(() => {
+    const names = transactions.map((txn) => txn.cashier_name || 'Tidak Diketahui');
+    return ['all', ...Array.from(new Set(names))];
+  }, [transactions]);
 
   // Export handlers
   const handleExportExcel = () => {
@@ -242,10 +272,17 @@ const handleEditTransaction = async (transactionId: string) => {
     },
     enablePagination: true,
     enableSorting: true,
-    enableColumnFilters: false,
-    enableGlobalFilter: false,
+    enableColumnFilters: true,
+    enableColumnFilterModes: true,
+    enableGlobalFilter: true,
     initialState: {
       pagination: { pageIndex: 0, pageSize: 10 },
+    },
+    muiSearchTextFieldProps: {
+      placeholder: 'Cari ID atau No Resit...',
+      variant: 'outlined',
+      size: 'small',
+      fullWidth: false,
     },
     muiTableBodyCellProps: {
       sx: {
@@ -261,7 +298,7 @@ const handleEditTransaction = async (transactionId: string) => {
   });
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-6">
       {/* Header */}
       <div>
         <h1 className="text-3xl font-bold text-gray-800">Data Transaksi</h1>
@@ -284,16 +321,20 @@ const handleEditTransaction = async (transactionId: string) => {
       {/* Search and Filter Section */}
       <div className="bg-white rounded-lg shadow-md p-6">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-          {/* Search */}
           <div className="relative">
-            <Search size={20} className="absolute left-3 top-3 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Cari ID atau No Resit..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-            />
+            <Filter size={20} className="absolute left-3 top-3 text-gray-400" />
+            <select
+              value={filterCashierName}
+              onChange={(e) => setFilterCashierName(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none appearance-none text-gray-600"
+            >
+              <option value="all">Semua Shift / Kasir</option>
+              {cashierOptions.filter((name) => name !== 'all').map((name) => (
+                <option key={name} value={name}>
+                  {name}
+                </option>
+              ))}
+            </select>
           </div>
 
           {/* Filter */}
@@ -302,7 +343,7 @@ const handleEditTransaction = async (transactionId: string) => {
             <select
               value={filterPaymentMethod}
               onChange={(e) => setFilterPaymentMethod(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none appearance-none"
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none appearance-none text-gray-400"
             >
               <option value="all">Semua Metode</option>
               <option value="cash">Tunai</option>
@@ -415,7 +456,6 @@ const handleEditTransaction = async (transactionId: string) => {
   );
 }
 
-// Detail Modal Component
 function DetailModal({
   transaction,
   onClose,
@@ -423,71 +463,108 @@ function DetailModal({
   transaction: any;
   onClose: () => void;
 }) {
+  const formatPaymentMethod = (method: string) => {
+    if (method === 'cash') return 'Tunai';
+    if (method === 'qris_static') return 'QRIS';
+    if (method === 'card') return 'Kartu';
+    return method;
+  };
+
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
-      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-96 overflow-y-auto">
-        <div className="sticky top-0 bg-gray-50 border-b px-6 py-4 flex justify-between items-center">
-          <h2 className="text-xl font-bold text-gray-800">Detail Transaksi</h2>
+    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden">
+        <div className="bg-gray-50 px-6 py-4 flex items-center justify-between border-b">
+          <div>
+            <h2 className="text-xl font-bold text-gray-900">Detail Transaksi</h2>
+            <p className="text-sm text-gray-600">No Resit {transaction.receipt_number}</p>
+          </div>
           <button
             onClick={onClose}
-            className="text-gray-500 hover:text-gray-700"
+            className="text-gray-500 hover:text-gray-800"
           >
             ✕
           </button>
         </div>
-        <div className="p-6 space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+
+        <div className="p-6 space-y-6">
+          <div className="grid gap-4 sm:grid-cols-2">
             <div>
-              <p className="text-gray-600 text-sm">ID Transaksi</p>
-              <p className="font-semibold text-gray-800">{transaction.id}</p>
+              <p className="text-sm text-gray-500">Tanggal</p>
+              <p className="font-semibold text-gray-900">{formatDate(new Date(transaction.created_at))}</p>
             </div>
             <div>
-              <p className="text-gray-600 text-sm">No Resit</p>
-              <p className="font-semibold text-gray-800">{transaction.receipt_number}</p>
+              <p className="text-sm text-gray-500">Metode Pembayaran</p>
+              <p className="font-semibold text-gray-900">{formatPaymentMethod(transaction.payment_method)}</p>
             </div>
             <div>
-              <p className="text-gray-600 text-sm">Metode Pembayaran</p>
-              <p className="font-semibold text-gray-800 capitalize">{transaction.payment_method}</p>
+              <p className="text-sm text-gray-500">Status</p>
+              <p className="font-semibold text-gray-900 capitalize">{transaction.status}</p>
             </div>
             <div>
-              <p className="text-gray-600 text-sm">Status</p>
-              <p className="font-semibold text-gray-800 capitalize">{transaction.status}</p>
+              <p className="text-sm text-gray-500">Kasir</p>
+              <p className="font-semibold text-gray-900">{transaction.cashier_name ?? '-'}</p>
             </div>
             <div>
-              <p className="text-gray-600 text-sm">Subtotal</p>
-              <p className="font-semibold text-gray-800">{formatCurrency(transaction.subtotal)}</p>
+              <p className="text-sm text-gray-500">Member</p>
+              <p className="font-semibold text-gray-900">{transaction.member_id ?? 'Tidak ada'}</p>
             </div>
             <div>
-              <p className="text-gray-600 text-sm">Diskon</p>
-              <p className="font-semibold text-gray-800">{formatCurrency(transaction.discount_amount)}</p>
-            </div>
-            <div>
-              <p className="text-gray-600 text-sm">Total</p>
-              <p className="font-bold text-lg text-green-600">{formatCurrency(transaction.total_amount)}</p>
-            </div>
-            <div>
-              <p className="text-gray-600 text-sm">Bayar</p>
-              <p className="font-semibold text-gray-800">{formatCurrency(transaction.amount_tendered)}</p>
+              <p className="text-sm text-gray-500">Voucher</p>
+              <p className="font-semibold text-gray-900">{transaction.voucher_id ?? 'Tidak ada'}</p>
             </div>
           </div>
 
-          {/* Items */}
-          <div className="mt-6 border-t pt-4">
-            <h3 className="font-semibold text-gray-800 mb-3">Item Transaksi</h3>
-            <div className="space-y-2">
-              {transaction.items?.map((item: any, idx: number) => (
-                <div key={idx} className="flex justify-between text-sm text-gray-700 bg-gray-50 p-2 rounded">
-                  <span>{item.quantity}x Menu (ID: {item.menu_id})</span>
-                  <span className="font-semibold">{formatCurrency(item.subtotal)}</span>
+          <div className="grid gap-4 sm:grid-cols-3">
+            <div className="rounded-2xl bg-slate-50 p-4 border">
+              <p className="text-sm text-gray-500">Subtotal</p>
+              <p className="mt-2 text-lg font-semibold text-gray-900">{formatCurrency(transaction.subtotal)}</p>
+            </div>
+            <div className="rounded-2xl bg-slate-50 p-4 border">
+              <p className="text-sm text-gray-500">Diskon</p>
+              <p className="mt-2 text-lg font-semibold text-gray-900">
+                {formatCurrency(transaction.discount_amount + transaction.voucher_discount_amount)}
+              </p>
+            </div>
+            <div className="rounded-2xl bg-slate-50 p-4 border">
+              <p className="text-sm text-gray-500">Total</p>
+              <p className="mt-2 text-lg font-semibold text-green-600">{formatCurrency(transaction.total_amount)}</p>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-gray-200 overflow-hidden">
+            <div className="grid grid-cols-[2fr_1fr_1fr_1fr] gap-2 bg-gray-100 px-4 py-3 text-sm font-semibold text-gray-700">
+              <div>Nama Menu</div>
+              <div className="text-right">Qty</div>
+              <div className="text-right">Harga</div>
+              <div className="text-right">Subtotal</div>
+            </div>
+
+            <div className="divide-y divide-gray-200 bg-white">
+              {transaction.items.map((item: any, index: number) => (
+                <div
+                  key={index}
+                  className="grid grid-cols-[2fr_1fr_1fr_1fr] gap-2 px-4 py-3 text-sm text-gray-700"
+                >
+                  <div>{item.menu_name ?? item.menu_id}</div>
+                  <div className="text-right">{item.quantity}</div>
+                  <div className="text-right">{formatCurrency(item.price)}</div>
+                  <div className="text-right">{formatCurrency(item.subtotal)}</div>
                 </div>
               ))}
+
+              {transaction.items.length === 0 && (
+                <div className="px-4 py-5 text-sm text-gray-500">
+                  Tidak ada item transaksi.
+                </div>
+              )}
             </div>
           </div>
         </div>
-        <div className="bg-gray-50 border-t px-6 py-3 text-right">
+
+        <div className="bg-gray-50 px-6 py-4 text-right">
           <button
             onClick={onClose}
-            className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white font-semibold rounded-lg"
+            className="px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-800"
           >
             Tutup
           </button>
