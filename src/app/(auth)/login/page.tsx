@@ -61,7 +61,7 @@ export default function LoginPage() {
         <div className="w-full max-w-xs md:max-w-md">
           {/* Login Card */}
           <div className="bg-white rounded-2xl shadow-2xl p-8">
-            <h2 className="text-2xl font-bold text-gray-800 mb-6">Login</h2>
+            <h2 className="text-2xl font-bold text-gray-800 mb-6">Loginn</h2>
 
             {error && (
               <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6 text-sm">
