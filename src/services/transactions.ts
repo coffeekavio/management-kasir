@@ -77,6 +77,7 @@ export const updateTransaction = async (
     payment_method?: string;
     amount_tendered?: number;
     status?: string;
+    total_amount?: number;
   }
 ) => {
   const response = await api.patch(`/api/transactions/${transaction_id}`, updates);

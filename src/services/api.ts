@@ -2,7 +2,7 @@
 
 import axios, { AxiosInstance } from 'axios';
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://idol-audience-belongs-towards.trycloudflare.com';
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://insulin-seeker-peace-technician.trycloudflare.com/';
 
 // Buat instance axios dengan baseURL
 export const api: AxiosInstance = axios.create({

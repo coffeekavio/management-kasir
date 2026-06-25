@@ -9,6 +9,7 @@ import {
   useMaterialReactTable,
   type MRT_ColumnDef,
 } from 'material-react-table';
+import { alertSuccess, alertError, alertConfirm, alertInfo } from '@/lib/alertUtils';
 
 interface TransactionList {
   id: string;
@@ -70,7 +71,7 @@ export default function TransactionsPage() {
       setShowDetailModal(true);
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Gagal mengambil detail transaksi';
-      alert(`Error: ${errorMsg}`);
+      await alertError('Error', errorMsg);
     }
   };
 
@@ -82,24 +83,24 @@ export default function TransactionsPage() {
       setTransactions(transactions.filter(t => t.id !== transactionToDelete));
       setShowDeleteModal(false);
       setTransactionToDelete(null);
-      alert('Transaksi berhasil dihapus');
+      await alertSuccess('Berhasil', 'Transaksi berhasil dihapus');
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Gagal menghapus transaksi';
-      alert(`Error: ${errorMsg}`);
+      await alertError('Error', errorMsg);
     }
   };
 
   // Handle edit transaksi
-const handleEditTransaction = async (transactionId: string) => {
-  try {
-    const detail = await getTransactionDetail(transactionId);
-    setTransactionToEdit(detail);
-    setShowEditModal(true);
-  } catch (err) {
-    const errorMsg = err instanceof Error ? err.message : 'Gagal mengambil detail transaksi';
-    alert(`Error: ${errorMsg}`);
-  }
-};
+  const handleEditTransaction = async (transactionId: string) => {
+    try {
+      const detail = await getTransactionDetail(transactionId);
+      setTransactionToEdit(detail);
+      setShowEditModal(true);
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Gagal mengambil detail transaksi';
+      await alertError('Error', errorMsg);
+    }
+  };
 
   const handleSaveEdit = async (updatedData: any) => {
     if (!transactionToEdit) return;
@@ -112,10 +113,10 @@ const handleEditTransaction = async (transactionId: string) => {
       
       setShowEditModal(false);
       setTransactionToEdit(null);
-      alert('Transaksi berhasil diupdate');
+      await alertSuccess('Berhasil', 'Transaksi berhasil diupdate');
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Gagal mengupdate transaksi';
-      alert(`Error: ${errorMsg}`);
+      await alertError('Error', errorMsg);
     } finally {
       setEditLoading(false);
     }
@@ -628,6 +629,7 @@ function EditModal({
     payment_method: transaction.payment_method || 'cash',
     amount_tendered: transaction.amount_tendered || 0,
     status: transaction.status || 'completed',
+    total_amount: transaction.total_amount || 0,
   });
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -667,7 +669,7 @@ function EditModal({
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+        <form onSubmit={handleSubmit} className="p-6 grid grid-cols-2 gap-4">
           {/* Discount Amount */}
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-2">
@@ -692,6 +694,17 @@ function EditModal({
               type="number"
               name="voucher_discount_amount"
               value={formData.voucher_discount_amount}
+              onChange={handleChange}
+              min="0"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-black"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">Total</label>
+            <input
+              type="number"
+              name="total_amount"
+              value={formData.total_amount}
               onChange={handleChange}
               min="0"
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-black"
@@ -748,7 +761,7 @@ function EditModal({
           </div>
 
           {/* Summary Info */}
-          <div className="bg-gray-50 p-3 rounded-lg border border-gray-200">
+          <div className="col-span-2 bg-gray-50 p-3 rounded-lg border border-gray-200">
             <div className="space-y-2 text-sm">
               <div className="flex justify-between">
                 <span className="text-gray-600">Subtotal:</span>
@@ -774,7 +787,7 @@ function EditModal({
           </div>
 
           {/* Buttons */}
-          <div className="flex gap-3 justify-end pt-4">
+          <div className="col-span-2 flex gap-3 justify-end pt-2">
             <button
               type="button"
               onClick={onClose}
